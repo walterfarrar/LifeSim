@@ -9,6 +9,12 @@ npm install
 npm run dev
 ```
 
+## Live demo
+
+https://walterfarrar.github.io/LifeSim/
+
+Pushes to `master` deploy automatically via GitHub Actions.
+
 ## Architecture
 
 - `src/sim/` — simulation engine (DNA, entities, world tick loop)
