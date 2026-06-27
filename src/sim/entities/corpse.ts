@@ -12,8 +12,7 @@ export function resetCorpseIds(): void {
 }
 
 function corpseBiomass(creature: Creature): number {
-  const traits = creatureTraits(creature)
-  return Math.max(12, creature.energy * 0.9 + traits.maxEnergy * 0.28)
+  return Math.max(0, creature.energy * 0.88)
 }
 
 export function createCorpseFromCreature(creature: Creature): Corpse {

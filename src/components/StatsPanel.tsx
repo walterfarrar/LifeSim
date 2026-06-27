@@ -15,6 +15,7 @@ type StatsPanelProps = {
   onRestart: () => void
   onReseed: () => void
   onOpenSettings: () => void
+  onOpenChampion: () => void
 }
 
 export function StatsPanel({
@@ -28,6 +29,7 @@ export function StatsPanel({
   onRestart,
   onReseed,
   onOpenSettings,
+  onOpenChampion,
 }: StatsPanelProps) {
   return (
     <div className="stats-panel">
@@ -55,6 +57,18 @@ export function StatsPanel({
         <div>
           <dt>Time</dt>
           <dd>{formatYears(stats.tick)}</dd>
+        </div>
+        <div>
+          <dt>Total energy</dt>
+          <dd title={`Plants ${Math.round(stats.plantEnergy)} · Creatures ${Math.round(stats.creatureEnergy)} · Corpses ${Math.round(stats.corpseEnergy)}`}>
+            {Math.round(stats.totalEnergy)}
+          </dd>
+        </div>
+        <div>
+          <dt>Solar input</dt>
+          <dd title="Energy added this tick by plant growth (photosynthesis)">
+            {stats.primaryProduction.toFixed(1)}/tick
+          </dd>
         </div>
         <div>
           <dt>Plants</dt>
@@ -92,6 +106,19 @@ export function StatsPanel({
         <button type="button" onClick={onReseed}>
           New seed
         </button>
+        <button
+          type="button"
+          className="champion-button"
+          onClick={onOpenChampion}
+          disabled={!autoChampion}
+          title={
+            autoChampion
+              ? `View champion · peak ${autoChampion.peakPopulation} members`
+              : 'No lineage champion saved yet'
+          }
+        >
+          Champion
+        </button>
       </div>
 
       <p className="stats-hint">
@@ -99,8 +126,11 @@ export function StatsPanel({
         {autoChampion && (
           <>
             {' '}
-            All-time lineage: peak {autoChampion.peakPopulation} members, together for{' '}
-            {formatYears(autoChampion.lineageSpanTicks)} — pick in ⚙ Saved champions.
+            All-time lineage: peak {autoChampion.peakPopulation} members —{' '}
+            <button type="button" className="stats-inline-link" onClick={onOpenChampion}>
+              view champion
+            </button>
+            {' '}or pick in ⚙ Saved champions.
           </>
         )}
       </p>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ChampionModal } from './components/ChampionModal'
 import { SimulationCanvas } from './components/SimulationCanvas'
 import { StatsPanel } from './components/StatsPanel'
 import { CreatureInspector } from './components/CreatureInspector'
@@ -23,6 +24,7 @@ function App() {
   const [seed, setSeed] = useState(() => Date.now())
   const [runId, setRunId] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [championOpen, setChampionOpen] = useState(false)
   const [draftSettings, setDraftSettings] = useState(loadSimSettings)
   const [activeSettings, setActiveSettings] = useState(loadSimSettings)
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null)
@@ -101,6 +103,10 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Escape' && championOpen) {
+        setChampionOpen(false)
+        return
+      }
       if (event.code === 'Escape' && settingsOpen) {
         setSettingsOpen(false)
         return
@@ -114,7 +120,7 @@ function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen])
+  }, [settingsOpen, championOpen])
 
   const selectedCreature =
     snapshot?.creatures.find((creature) => creature.id === selectedId) ?? null
@@ -125,6 +131,11 @@ function App() {
     herbivoreCount: 0,
     births: 0,
     deaths: 0,
+    totalEnergy: 0,
+    plantEnergy: 0,
+    creatureEnergy: 0,
+    corpseEnergy: 0,
+    primaryProduction: 0,
   }
 
   const pendingSettingsChanges = settingsRunKey(draftSettings) !== settingsRunKey(activeSettings)
@@ -143,6 +154,7 @@ function App() {
           onRestart={() => handleStart(false)}
           onReseed={() => handleStart(true)}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenChampion={() => setChampionOpen(true)}
         />
         <CreatureInspector
           creature={selectedCreature}
@@ -157,6 +169,11 @@ function App() {
         selectedId={selectedId}
         onSnapshot={onSnapshot}
         onSelectCreature={setSelectedId}
+      />
+      <ChampionModal
+        open={championOpen}
+        champion={autoChampion}
+        onClose={() => setChampionOpen(false)}
       />
       <SettingsModal
         open={settingsOpen}

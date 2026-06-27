@@ -20,7 +20,12 @@ function startingEnergy(rng: Rng, maxEnergy: number): number {
   return rng.range(8, maxEnergy * 0.6)
 }
 
-export function createPlant(rng: Rng, position?: Vec2, parentDna?: Plant['dna']): Plant {
+export function createPlant(
+  rng: Rng,
+  position?: Vec2,
+  parentDna?: Plant['dna'],
+  initialEnergy?: number,
+): Plant {
   const dna = parentDna ? mutatePlant(cloneDNA(parentDna), rng) : createRandomDNA(rng, PLANT_GENE_COUNT)
   const traits = expressPlant(dna)
   return {
@@ -29,7 +34,7 @@ export function createPlant(rng: Rng, position?: Vec2, parentDna?: Plant['dna'])
     x: position?.x ?? rng.range(20, WORLD_WIDTH - 20),
     y: position?.y ?? rng.range(20, WORLD_HEIGHT - 20),
     dna,
-    energy: startingEnergy(rng, traits.maxEnergy),
+    energy: initialEnergy ?? startingEnergy(rng, traits.maxEnergy),
     age: 0,
   }
 }
@@ -48,7 +53,10 @@ export function plantSpreadRange(parent: Plant): { min: number; max: number } {
 }
 
 /** Spawn a new plant within spread distance of an existing one. */
-export function createPlantNear(rng: Rng, parent: Plant): Plant {
+export function createPlantNear(rng: Rng, parent: Plant, initialEnergy?: number): Plant {
+  const spawn = (position: Vec2) =>
+    createPlant(rng, position, parent.dna, initialEnergy)
+
   const { min, max } = plantSpreadRange(parent)
   for (let attempt = 0; attempt < 10; attempt++) {
     const angle = rng.range(0, Math.PI * 2)
@@ -56,7 +64,7 @@ export function createPlantNear(rng: Rng, parent: Plant): Plant {
     const x = parent.x + Math.cos(angle) * dist
     const y = parent.y + Math.sin(angle) * dist
     if (x >= 20 && x <= WORLD_WIDTH - 20 && y >= 20 && y <= WORLD_HEIGHT - 20) {
-      return createPlant(rng, { x, y }, parent.dna)
+      return spawn({ x, y })
     }
   }
 
@@ -64,7 +72,7 @@ export function createPlantNear(rng: Rng, parent: Plant): Plant {
   const dist = rng.range(min, max)
   const x = clamp(parent.x + Math.cos(angle) * dist, 20, WORLD_WIDTH - 20)
   const y = clamp(parent.y + Math.sin(angle) * dist, 20, WORLD_HEIGHT - 20)
-  return createPlant(rng, { x, y }, parent.dna)
+  return spawn({ x, y })
 }
 
 function clamp(value: number, min: number, max: number): number {

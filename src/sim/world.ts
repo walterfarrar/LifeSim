@@ -65,6 +65,12 @@ import {
   shouldHuntPreyOverPlant,
   tryEatCorpse,
 } from './predation'
+import {
+  energyFromCorpseBiomass,
+  energyFromPlantBiomass,
+  energyFromPreyBiomass,
+  sumEntityEnergy,
+} from './energyEconomy'
 import { Rng } from './rng'
 import type { Corpse, Creature, Plant, WorldSnapshot, WorldStats } from './types'
 
@@ -81,7 +87,13 @@ export class World {
     herbivoreCount: 0,
     births: 0,
     deaths: 0,
+    totalEnergy: 0,
+    plantEnergy: 0,
+    creatureEnergy: 0,
+    corpseEnergy: 0,
+    primaryProduction: 0,
   }
+  private primaryProductionThisTick = 0
 
   constructor(seed?: number, settings: SimSettings = DEFAULT_SIM_SETTINGS) {
     this.settings = { ...settings }
@@ -104,7 +116,19 @@ export class World {
     this.corpses = []
     this.creatures = []
     this.pathogens = createInitialPathogens(this.rng, 3)
-    this.stats = { tick: 0, plantCount: 0, herbivoreCount: 0, births: 0, deaths: 0 }
+    this.stats = {
+      tick: 0,
+      plantCount: 0,
+      herbivoreCount: 0,
+      births: 0,
+      deaths: 0,
+      totalEnergy: 0,
+      plantEnergy: 0,
+      creatureEnergy: 0,
+      corpseEnergy: 0,
+      primaryProduction: 0,
+    }
+    this.primaryProductionThisTick = 0
 
     for (let i = 0; i < this.settings.initialPlants; i++) {
       this.plants.push(createPlant(this.rng))
@@ -133,9 +157,12 @@ export class World {
 
   tick(): void {
     this.stats.tick += 1
+    this.primaryProductionThisTick = 0
 
     for (const plant of this.plants) {
+      const before = plant.energy
       growPlant(plant)
+      this.primaryProductionThisTick += Math.max(0, plant.energy - before)
     }
 
     for (const corpse of this.corpses) {
@@ -178,7 +205,9 @@ export class World {
 
     if (this.plants.length === 0) {
       if (this.rng.chance(plantWindSpawnChance)) {
-        this.plants.push(createPlant(this.rng))
+        const plant = createPlant(this.rng)
+        this.plants.push(plant)
+        this.primaryProductionThisTick += plant.energy
       }
       return
     }
@@ -197,7 +226,12 @@ export class World {
     const reproductionChance = Math.min(1, spawnChance * parentTraits.reproductionRate)
     if (!this.rng.chance(reproductionChance)) return
 
-    this.plants.push(createPlantNear(this.rng, parent))
+    const seedCost = Math.min(parent.energy * 0.22, parentTraits.maxEnergy * 0.14)
+    if (parent.energy < seedCost + 0.5) return
+    parent.energy -= seedCost
+
+    const child = createPlantNear(this.rng, parent, seedCost * 0.92)
+    this.plants.push(child)
   }
 
   private runCreatureBehavior(): void {
@@ -244,10 +278,11 @@ export class World {
       )
 
       if (nearestPlant) {
-        const eaten = tryEatPlant(creature, nearestPlant)
-        if (eaten > 0) {
-          bitePlant(nearestPlant, eaten)
-          creature.energy = capEnergy(creature, creature.energy + eaten)
+        const biomass = tryEatPlant(creature, nearestPlant)
+        if (biomass > 0) {
+          bitePlant(nearestPlant, biomass)
+          const gained = energyFromPlantBiomass(biomass, traits.forageEfficiency)
+          creature.energy = capEnergy(creature, creature.energy + gained)
           if (!isPlantEdible(nearestPlant)) {
             eatenPlantIds.add(nearestPlant.id)
           }
@@ -269,10 +304,11 @@ export class World {
       }
 
       if (nearestCorpse) {
-        const eaten = tryEatCorpse(creature, nearestCorpse)
-        if (eaten > 0) {
-          biteCorpse(nearestCorpse, eaten)
-          creature.energy = capEnergy(creature, creature.energy + eaten)
+        const biomass = tryEatCorpse(creature, nearestCorpse)
+        if (biomass > 0) {
+          biteCorpse(nearestCorpse, biomass)
+          const gained = energyFromCorpseBiomass(biomass, traits.forageEfficiency)
+          creature.energy = capEnergy(creature, creature.energy + gained)
           if (!isCorpseEdible(nearestCorpse)) {
             eatenCorpseIds.add(nearestCorpse.id)
           }
@@ -283,9 +319,10 @@ export class World {
 
       for (const prey of this.creatures) {
         if (!isValidPrey(creature, prey)) continue
-        const eaten = attemptPredation(creature, prey, this.rng)
-        if (eaten > 0) {
-          creature.energy = capEnergy(creature, creature.energy + eaten)
+        const biomass = attemptPredation(creature, prey, this.rng)
+        if (biomass > 0) {
+          const gained = energyFromPreyBiomass(biomass, traits.forageEfficiency)
+          creature.energy = capEnergy(creature, creature.energy + gained)
           break
         }
       }
@@ -448,5 +485,12 @@ export class World {
   private refreshStats(): void {
     this.stats.plantCount = this.plants.length
     this.stats.herbivoreCount = this.creatures.length
+    this.stats.primaryProduction = this.primaryProductionThisTick
+
+    const energy = sumEntityEnergy(this.plants, this.creatures, this.corpses)
+    this.stats.plantEnergy = energy.plants
+    this.stats.creatureEnergy = energy.creatures
+    this.stats.corpseEnergy = energy.corpses
+    this.stats.totalEnergy = energy.total
   }
 }

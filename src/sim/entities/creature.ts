@@ -152,7 +152,6 @@ function applyFatigue(creature: Creature): void {
   const traits = creatureTraits(creature)
   if (creature.mode === 'sleepy') {
     creature.fatigue = Math.max(0, creature.fatigue - traits.sleepFatigueRecovery)
-    creature.energy = Math.min(traits.maxEnergy, creature.energy + traits.sleepEnergyRecovery)
   } else {
     creature.fatigue += traits.awakeFatigueGain
   }

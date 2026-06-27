@@ -76,6 +76,11 @@ export interface WorldStats {
   herbivoreCount: number
   births: number
   deaths: number
+  totalEnergy: number
+  plantEnergy: number
+  creatureEnergy: number
+  corpseEnergy: number
+  primaryProduction: number
 }
 
 export interface WorldSnapshot {
