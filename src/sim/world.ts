@@ -1,0 +1,452 @@
+import {
+  WORLD_HEIGHT,
+  WORLD_WIDTH,
+} from './config'
+import { createMultiGroupPopulation } from './dna'
+import {
+  createInitialPathogens,
+  resetPathogenIds,
+  type Pathogen,
+} from './disease/pathogen'
+import { tickDiseaseSystem } from './disease/diseaseSystem'
+import { resolveGroupFounderDnas } from './founderGenomes'
+import {
+  DEFAULT_SIM_SETTINGS,
+  type SimSettings,
+} from './simSettings'
+import {
+  applyMetabolism,
+  applyMovement,
+  canSeekMate,
+  capEnergy,
+  createHerbivore,
+  creatureTraits,
+  isAlive,
+  mate,
+  mateProximity,
+  moveToward,
+  needsFood,
+  resetCreatureIds,
+  tickPregnancy,
+  toroidalDistance,
+  tryEatPlant,
+  updateMode,
+} from './entities/creature'
+import {
+  biteCorpse,
+  createCorpseFromCreature,
+  decayCorpse,
+  isCorpseEdible,
+  resetCorpseIds,
+} from './entities/corpse'
+import {
+  bitePlant,
+  createPlant,
+  createPlantNear,
+  growPlant,
+  isPlantEdible,
+  plantTraits,
+  resetPlantIds,
+} from './entities/plant'
+import {
+  isMateEligible,
+  mateAcceptanceThreshold,
+  mateAttractionScore,
+  mutuallyAcceptMate,
+} from './matePreference'
+import { applySpaceReaction, evaluateSpaceReaction } from './spaceBehavior'
+import { findBestPlantTarget } from './foraging'
+import {
+  attemptPredation,
+  findBestCorpseTarget,
+  findBestPreyTarget,
+  isValidPrey,
+  shouldHuntCorpseOverPlant,
+  shouldHuntPreyOverPlant,
+  tryEatCorpse,
+} from './predation'
+import { Rng } from './rng'
+import type { Corpse, Creature, Plant, WorldSnapshot, WorldStats } from './types'
+
+export class World {
+  private plants: Plant[] = []
+  private corpses: Corpse[] = []
+  private creatures: Creature[] = []
+  private pathogens: Pathogen[] = []
+  private rng: Rng
+  private settings: SimSettings
+  private stats: WorldStats = {
+    tick: 0,
+    plantCount: 0,
+    herbivoreCount: 0,
+    births: 0,
+    deaths: 0,
+  }
+
+  constructor(seed?: number, settings: SimSettings = DEFAULT_SIM_SETTINGS) {
+    this.settings = { ...settings }
+    this.rng = new Rng(seed)
+    this.reset()
+  }
+
+  reset(seed?: number, settings?: SimSettings): void {
+    if (seed !== undefined) {
+      this.rng = new Rng(seed)
+    }
+    if (settings) {
+      this.settings = { ...settings }
+    }
+    resetPlantIds()
+    resetCorpseIds()
+    resetCreatureIds()
+    resetPathogenIds()
+    this.plants = []
+    this.corpses = []
+    this.creatures = []
+    this.pathogens = createInitialPathogens(this.rng, 3)
+    this.stats = { tick: 0, plantCount: 0, herbivoreCount: 0, births: 0, deaths: 0 }
+
+    for (let i = 0; i < this.settings.initialPlants; i++) {
+      this.plants.push(createPlant(this.rng))
+    }
+
+    const founderSettings = {
+      founderGeneSpread: this.settings.founderGeneSpread,
+      founderJitterChance: this.settings.founderJitterChance,
+      founderPreferenceNoise: this.settings.founderPreferenceNoise,
+    }
+    const groupFounderDna = resolveGroupFounderDnas(
+      this.settings.creatureGroups,
+      this.settings.groupFounders,
+    )
+    for (const spawn of createMultiGroupPopulation(
+      this.rng,
+      this.settings.creatureGroups,
+      this.settings.herbivoresPerGroup,
+      founderSettings,
+      groupFounderDna,
+    )) {
+      this.creatures.push(createHerbivore(this.rng, spawn.position, spawn.dna))
+    }
+    this.refreshStats()
+  }
+
+  tick(): void {
+    this.stats.tick += 1
+
+    for (const plant of this.plants) {
+      growPlant(plant)
+    }
+
+    for (const corpse of this.corpses) {
+      decayCorpse(corpse)
+    }
+
+    this.spawnPlants()
+    this.runCreatureBehavior()
+    tickDiseaseSystem(this.creatures, this.pathogens, this.rng, this.stats.tick)
+    this.cullDead()
+    this.refreshStats()
+  }
+
+  snapshot(): WorldSnapshot {
+    return {
+      plants: this.plants,
+      corpses: this.corpses,
+      creatures: this.creatures,
+      stats: { ...this.stats },
+    }
+  }
+
+  get width(): number {
+    return WORLD_WIDTH
+  }
+
+  get height(): number {
+    return WORLD_HEIGHT
+  }
+
+  private spawnPlants(): void {
+    const {
+      maxPlants,
+      plantWindSpawnChance,
+      plantLowCountBoost,
+      plantSpawnChance,
+    } = this.settings
+
+    if (this.plants.length >= maxPlants) return
+
+    if (this.plants.length === 0) {
+      if (this.rng.chance(plantWindSpawnChance)) {
+        this.plants.push(createPlant(this.rng))
+      }
+      return
+    }
+
+    const spawnChance =
+      this.plants.length < plantLowCountBoost
+        ? plantSpawnChance * 2.5
+        : plantSpawnChance
+    if (!this.rng.chance(spawnChance)) return
+
+    const parentIndex = this.rng.int(0, this.plants.length - 1)
+    const parent = this.plants[parentIndex]
+    if (!parent) return
+
+    const parentTraits = plantTraits(parent)
+    const reproductionChance = Math.min(1, spawnChance * parentTraits.reproductionRate)
+    if (!this.rng.chance(reproductionChance)) return
+
+    this.plants.push(createPlantNear(this.rng, parent))
+  }
+
+  private runCreatureBehavior(): void {
+    const eatenPlantIds = new Set<number>()
+    const eatenCorpseIds = new Set<number>()
+    const newborns: Creature[] = []
+    const paired = new Set<number>()
+
+    for (const creature of this.creatures) {
+      updateMode(creature)
+      const traits = creatureTraits(creature)
+      const spaceReaction = evaluateSpaceReaction(creature, this.creatures)
+      const handledSpace = applySpaceReaction(creature, spaceReaction)
+
+      if (!handledSpace) {
+        if (creature.mode === 'sleepy') {
+          const target = this.pickWanderGoal(creature)
+          moveToward(creature, target, traits)
+          creature.vx *= traits.sleepMobility
+          creature.vy *= traits.sleepMobility
+        } else {
+          const target = this.findGoal(creature)
+          moveToward(creature, target, traits)
+        }
+      } else if (creature.mode === 'sleepy') {
+        creature.vx *= traits.sleepMobility
+        creature.vy *= traits.sleepMobility
+      }
+
+      applyMovement(creature)
+    }
+
+    for (const creature of this.creatures) {
+      if (!needsFood(creature)) continue
+
+      const traits = creatureTraits(creature)
+      const forageReach = traits.radius + traits.forageReach
+      const nearestPlant = findBestPlantTarget(
+        traits,
+        this.plants.filter(isPlantEdible),
+        (plant) => toroidalDistance(creature, plant),
+        forageReach,
+        eatenPlantIds,
+      )
+
+      if (nearestPlant) {
+        const eaten = tryEatPlant(creature, nearestPlant)
+        if (eaten > 0) {
+          bitePlant(nearestPlant, eaten)
+          creature.energy = capEnergy(creature, creature.energy + eaten)
+          if (!isPlantEdible(nearestPlant)) {
+            eatenPlantIds.add(nearestPlant.id)
+          }
+        }
+      }
+
+      if (!needsFood(creature)) continue
+
+      let nearestCorpse: Corpse | null = null
+      let nearestCorpseDist = Infinity
+
+      for (const corpse of this.corpses) {
+        if (!isCorpseEdible(corpse) || eatenCorpseIds.has(corpse.id)) continue
+        const dist = toroidalDistance(creature, corpse)
+        if (dist < nearestCorpseDist) {
+          nearestCorpseDist = dist
+          nearestCorpse = corpse
+        }
+      }
+
+      if (nearestCorpse) {
+        const eaten = tryEatCorpse(creature, nearestCorpse)
+        if (eaten > 0) {
+          biteCorpse(nearestCorpse, eaten)
+          creature.energy = capEnergy(creature, creature.energy + eaten)
+          if (!isCorpseEdible(nearestCorpse)) {
+            eatenCorpseIds.add(nearestCorpse.id)
+          }
+        }
+      }
+
+      if (!needsFood(creature)) continue
+
+      for (const prey of this.creatures) {
+        if (!isValidPrey(creature, prey)) continue
+        const eaten = attemptPredation(creature, prey, this.rng)
+        if (eaten > 0) {
+          creature.energy = capEnergy(creature, creature.energy + eaten)
+          break
+        }
+      }
+    }
+
+    for (const creature of this.creatures) {
+      applyMetabolism(creature)
+    }
+
+    for (const creature of this.creatures) {
+      const child = tickPregnancy(creature, this.rng)
+      if (child) {
+        newborns.push(child)
+        this.stats.births += 1
+      }
+    }
+
+    for (let i = 0; i < this.creatures.length; i++) {
+      for (let j = i + 1; j < this.creatures.length; j++) {
+        const a = this.creatures[i]
+        const b = this.creatures[j]
+        if (paired.has(a.id) || paired.has(b.id)) continue
+        if (a.sex === b.sex) continue
+        if (a.mode !== 'horny' || b.mode !== 'horny') continue
+        if (!canSeekMate(a) || !canSeekMate(b)) continue
+        if (toroidalDistance(a, b) > mateProximity(a, b)) continue
+        const mateDist = toroidalDistance(a, b)
+        const mateRange = mateProximity(a, b)
+        if (!mutuallyAcceptMate(a, b, mateDist, mateRange)) continue
+
+        const male = a.sex === 'male' ? a : b
+        const female = a.sex === 'female' ? a : b
+        if (mate(male, female)) {
+          paired.add(a.id)
+          paired.add(b.id)
+        }
+      }
+    }
+
+    this.creatures.push(...newborns)
+  }
+
+  private findMateGoal(creature: Creature, vision: number): { x: number; y: number } {
+    const traits = creatureTraits(creature)
+    const seekRange = vision * traits.exploreVisionMult
+    const threshold = mateAcceptanceThreshold(creature)
+    let mateTarget: Creature | null = null
+    let bestScore = -1
+
+    for (const other of this.creatures) {
+      if (!isMateEligible(creature, other)) continue
+      if (!canSeekMate(other) && other.mode !== 'horny') continue
+      const dist = toroidalDistance(creature, other)
+      if (dist >= seekRange) continue
+
+      const score = mateAttractionScore(creature, other, dist, seekRange)
+      if (score >= threshold && score > bestScore) {
+        bestScore = score
+        mateTarget = other
+      }
+    }
+
+    if (mateTarget) return mateTarget
+    return this.findFoodGoalWhileExploring(creature, vision) ?? this.pickWanderGoal(creature)
+  }
+
+  private findFoodGoalWhileExploring(creature: Creature, vision: number): { x: number; y: number } | null {
+    const traits = creatureTraits(creature)
+    const seekRange = vision * traits.exploreVisionMult
+    const food = this.findBestPlantFood(creature, seekRange)
+    const foodDist = food ? toroidalDistance(creature, food) : Infinity
+
+    const corpse = findBestCorpseTarget(creature, this.corpses, seekRange)
+    if (corpse) {
+      const corpseDist = toroidalDistance(creature, corpse)
+      if (shouldHuntCorpseOverPlant(creature, corpse, foodDist, corpseDist, seekRange)) {
+        return corpse
+      }
+    }
+
+    return food
+  }
+
+  private findBestPlantFood(creature: Creature, seekRange: number): Plant | null {
+    const traits = creatureTraits(creature)
+    return findBestPlantTarget(
+      traits,
+      this.plants.filter(isPlantEdible),
+      (plant) => toroidalDistance(creature, plant),
+      seekRange,
+    )
+  }
+
+  private findFoodGoal(creature: Creature, vision: number): { x: number; y: number } {
+    const food = this.findBestPlantFood(creature, vision)
+    const foodDist = food ? toroidalDistance(creature, food) : Infinity
+
+    const corpse = findBestCorpseTarget(creature, this.corpses, vision)
+    if (corpse) {
+      const corpseDist = toroidalDistance(creature, corpse)
+      if (shouldHuntCorpseOverPlant(creature, corpse, foodDist, corpseDist, vision)) {
+        return corpse
+      }
+    }
+
+    const prey = findBestPreyTarget(creature, this.creatures, vision)
+    if (prey) {
+      const preyDist = toroidalDistance(creature, prey)
+      if (shouldHuntPreyOverPlant(creature, prey, foodDist, preyDist, vision)) {
+        return prey
+      }
+    }
+
+    return food ?? this.findFoodGoalWhileExploring(creature, vision) ?? this.pickWanderGoal(creature)
+  }
+
+  private findGoal(creature: Creature): { x: number; y: number } {
+    const traits = creatureTraits(creature)
+
+    switch (creature.mode) {
+      case 'horny':
+        return this.findMateGoal(creature, traits.vision)
+      case 'hungry':
+        return this.findFoodGoal(creature, traits.vision)
+      case 'sleepy':
+        return this.pickWanderGoal(creature)
+    }
+  }
+
+  private pickWanderGoal(creature: Creature): { x: number; y: number } {
+    const traits = creatureTraits(creature)
+    if (creature.wanderTicksRemaining > 0) {
+      creature.wanderTicksRemaining -= 1
+      return { x: creature.wanderX, y: creature.wanderY }
+    }
+    creature.wanderX = this.rng.range(40, WORLD_WIDTH - 40)
+    creature.wanderY = this.rng.range(40, WORLD_HEIGHT - 40)
+    creature.wanderTicksRemaining =
+      traits.wanderDurationMin + this.rng.int(0, traits.wanderDurationSpan)
+    return { x: creature.wanderX, y: creature.wanderY }
+  }
+
+  private cullDead(): void {
+    const survivors: Creature[] = []
+
+    for (const creature of this.creatures) {
+      if (isAlive(creature)) {
+        survivors.push(creature)
+        continue
+      }
+      this.corpses.push(createCorpseFromCreature(creature))
+      this.stats.deaths += 1
+    }
+
+    this.creatures = survivors
+    this.plants = this.plants.filter(isPlantEdible)
+    this.corpses = this.corpses.filter(isCorpseEdible)
+  }
+
+  private refreshStats(): void {
+    this.stats.plantCount = this.plants.length
+    this.stats.herbivoreCount = this.creatures.length
+  }
+}
