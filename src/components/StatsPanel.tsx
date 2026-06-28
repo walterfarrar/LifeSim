@@ -1,6 +1,8 @@
 import type { WorldStats } from '../sim/types'
 import { formatYears } from '../sim/timeScale'
 import type { AutoChampionRecord } from '../sim/autoChampion'
+import type { AutoPlantChampionRecord } from '../sim/plantAutoChampion'
+import type { AutoPathogenChampionRecord } from '../sim/pathogenAutoChampion'
 import type { SimSettings } from '../sim/simSettings'
 import { totalStartingHerbivores } from '../sim/simSettings'
 
@@ -10,12 +12,15 @@ type StatsPanelProps = {
   settings: SimSettings
   seed: number
   autoChampion: AutoChampionRecord | null
+  autoPlantChampion: AutoPlantChampionRecord | null
+  autoPathogenChampion: AutoPathogenChampionRecord | null
+  hasChampionHall: boolean
   pendingSettingsChanges: boolean
   onTogglePause: () => void
   onRestart: () => void
   onReseed: () => void
   onOpenSettings: () => void
-  onOpenChampion: () => void
+  onOpenHall: () => void
 }
 
 export function StatsPanel({
@@ -24,12 +29,15 @@ export function StatsPanel({
   settings,
   seed,
   autoChampion,
+  autoPlantChampion,
+  autoPathogenChampion,
+  hasChampionHall,
   pendingSettingsChanges,
   onTogglePause,
   onRestart,
   onReseed,
   onOpenSettings,
-  onOpenChampion,
+  onOpenHall,
 }: StatsPanelProps) {
   return (
     <div className="stats-panel">
@@ -109,15 +117,15 @@ export function StatsPanel({
         <button
           type="button"
           className="champion-button"
-          onClick={onOpenChampion}
-          disabled={!autoChampion}
+          onClick={onOpenHall}
+          disabled={!hasChampionHall}
           title={
-            autoChampion
-              ? `View champion · peak ${autoChampion.peakPopulation} members`
-              : 'No lineage champion saved yet'
+            hasChampionHall
+              ? 'View top 5 champions — creatures, plants, and diseases'
+              : 'No champions saved yet'
           }
         >
-          Champion
+          Hall of fame
         </button>
       </div>
 
@@ -126,11 +134,28 @@ export function StatsPanel({
         {autoChampion && (
           <>
             {' '}
-            All-time lineage: peak {autoChampion.peakPopulation} members —{' '}
-            <button type="button" className="stats-inline-link" onClick={onOpenChampion}>
-              view champion
+            Creature #1: peak {autoChampion.peakPopulation}.
+          </>
+        )}
+        {autoPlantChampion && (
+          <>
+            {' '}
+            Plant #1: peak {autoPlantChampion.peakPopulation}
+            {settings.respawnBestPlantSpecies ? ' · re-seeds on reset' : ''}.
+          </>
+        )}
+        {autoPathogenChampion && (
+          <>
+            {' '}
+            Disease #1: peak {autoPathogenChampion.peakInfected} infected.
+          </>
+        )}
+        {hasChampionHall && (
+          <>
+            {' '}
+            <button type="button" className="stats-inline-link" onClick={onOpenHall}>
+              View top 5 lists
             </button>
-            {' '}or pick in ⚙ Saved champions.
           </>
         )}
       </p>

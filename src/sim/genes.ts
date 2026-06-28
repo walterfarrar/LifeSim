@@ -167,3 +167,22 @@ export type HerbivoreTraits = {
   courtshipEagerness: number
   closeMateLeniency: number
 }
+
+/** Pathogen genome — antigens and transmission traits are heritable. */
+export const PATHOGEN_GENE_COUNT = 5
+
+export const PathogenGene = {
+  Antigen0: 0,
+  Antigen1: 1,
+  Antigen2: 2,
+  Virulence: 3,
+  Transmissibility: 4,
+} as const
+
+export type PathogenGeneIndex = (typeof PathogenGene)[keyof typeof PathogenGene]
+
+export type PathogenExpressedTraits = {
+  antigens: [number, number, number]
+  virulence: number
+  transmissibility: number
+}

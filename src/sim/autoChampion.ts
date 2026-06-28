@@ -1,18 +1,24 @@
 import { TICKS_PER_SECOND } from './config'
+import {
+  crownInHall,
+  hallChampion,
+  loadChampionHall,
+  saveChampionHall,
+  type ChampionHallEntry,
+} from './championHall'
 import { creatureToSavedGenome, type SavedGenome } from './dnaExport'
 import { LineageTracker } from './lineage/lineageTracker'
 import type { Creature } from './types'
 
 export const AUTO_CHAMPION_GENOME_ID = '__auto-champion__'
+export const CREATURE_CHAMPION_HALL_KEY = 'lifesim-champion-hall-creatures'
+const LEGACY_CHAMPION_KEY = 'lifesim-auto-champion'
+
 /** How often lineage fitness is sampled (once per real-time minute at 30 tps). */
 export const AUTO_CHAMPION_CHECK_INTERVAL = TICKS_PER_SECOND * 60
 
-export type AutoChampionRecord = {
+export type AutoChampionRecord = ChampionHallEntry & {
   genome: SavedGenome
-  fitnessScore: number
-  runSeed: number
-  runTick: number
-  savedAt: string
   lineageId: string
   population: number
   peakPopulation: number
@@ -20,47 +26,59 @@ export type AutoChampionRecord = {
   observationCount: number
 }
 
-const STORAGE_KEY = 'lifesim-auto-champion'
-
-export function loadAutoChampionRecord(): AutoChampionRecord | null {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored) return null
-    const raw = JSON.parse(stored) as Partial<AutoChampionRecord>
-    if (!raw.genome || !Array.isArray(raw.genome.genes)) return null
-    return {
-      genome: {
-        ...raw.genome,
-        id: AUTO_CHAMPION_GENOME_ID,
-        geneCount: raw.genome.genes.length,
-        genes: raw.genome.genes.map((g) => Number(g)),
-        name: String(raw.genome.name ?? 'All-time lineage'),
-        savedAt: String(raw.genome.savedAt ?? raw.savedAt ?? new Date().toISOString()),
-        sex: raw.genome.sex === 'female' ? 'female' : 'male',
-        sourceCreatureId: Number(raw.genome.sourceCreatureId ?? 0),
-        ageTicks: Number(raw.genome.ageTicks ?? 0),
-        energy: Number(raw.genome.energy ?? 0),
-      },
-      fitnessScore: Number(raw.fitnessScore ?? 0),
-      runSeed: Number(raw.runSeed ?? 0),
-      runTick: Number(raw.runTick ?? 0),
-      savedAt: String(raw.savedAt ?? new Date().toISOString()),
-      lineageId: String(raw.lineageId ?? 'lineage-unknown'),
-      population: Number(raw.population ?? 0),
-      peakPopulation: Number(raw.peakPopulation ?? 0),
-      lineageSpanTicks: Number(raw.lineageSpanTicks ?? 0),
-      observationCount: Number(raw.observationCount ?? 0),
-    }
-  } catch {
-    return null
+function parseCreatureChampionEntry(raw: unknown): AutoChampionRecord | null {
+  if (!raw || typeof raw !== 'object') return null
+  const record = raw as Partial<AutoChampionRecord>
+  if (!record.genome || !Array.isArray(record.genome.genes)) return null
+  return {
+    entryId: String(record.entryId ?? record.lineageId ?? `lineage-${Date.now()}`),
+    genome: {
+      ...record.genome,
+      id: String(record.genome.id ?? `genome-${Date.now()}`),
+      geneCount: record.genome.genes.length,
+      genes: record.genome.genes.map((g) => Number(g)),
+      name: String(record.genome.name ?? 'Saved lineage'),
+      savedAt: String(record.genome.savedAt ?? record.savedAt ?? new Date().toISOString()),
+      sex: record.genome.sex === 'female' ? 'female' : 'male',
+      sourceCreatureId: Number(record.genome.sourceCreatureId ?? 0),
+      ageTicks: Number(record.genome.ageTicks ?? 0),
+      energy: Number(record.genome.energy ?? 0),
+    },
+    fitnessScore: Number(record.fitnessScore ?? 0),
+    runSeed: Number(record.runSeed ?? 0),
+    runTick: Number(record.runTick ?? 0),
+    savedAt: String(record.savedAt ?? new Date().toISOString()),
+    lineageId: String(record.lineageId ?? record.entryId ?? 'lineage-unknown'),
+    population: Number(record.population ?? 0),
+    peakPopulation: Number(record.peakPopulation ?? 0),
+    lineageSpanTicks: Number(record.lineageSpanTicks ?? 0),
+    observationCount: Number(record.observationCount ?? 0),
   }
 }
 
-function saveAutoChampionRecord(record: AutoChampionRecord): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(record))
-  } catch {
-    // ignore quota / private mode errors
+function parseLegacyCreatureChampion(raw: unknown): AutoChampionRecord | null {
+  const entry = parseCreatureChampionEntry(raw)
+  if (!entry) return null
+  entry.genome.id = AUTO_CHAMPION_GENOME_ID
+  entry.entryId = entry.lineageId
+  return entry
+}
+
+export function loadCreatureChampionHall(): AutoChampionRecord[] {
+  return loadChampionHall(
+    CREATURE_CHAMPION_HALL_KEY,
+    parseCreatureChampionEntry,
+    LEGACY_CHAMPION_KEY,
+    parseLegacyCreatureChampion,
+  )
+}
+
+export function loadAutoChampionRecord(): AutoChampionRecord | null {
+  const champion = hallChampion(loadCreatureChampionHall())
+  if (!champion) return null
+  return {
+    ...champion,
+    genome: { ...champion.genome, id: AUTO_CHAMPION_GENOME_ID },
   }
 }
 
@@ -81,9 +99,9 @@ export function buildLineageChampionRecord(
     representative,
     `Lineage · peak ${lineage.peakPopulation} · #${representative.id}`,
   )
-  genome.id = AUTO_CHAMPION_GENOME_ID
 
   return {
+    entryId: lineage.id,
     genome,
     fitnessScore,
     runSeed,
@@ -103,21 +121,17 @@ export function tryUpdateAutoChampion(
   creatures: readonly Creature[],
   runSeed: number,
   runTick: number,
-): AutoChampionRecord | null {
+): { champion: AutoChampionRecord | null; hall: AutoChampionRecord[]; crowned: boolean } {
+  const hall = loadCreatureChampionHall()
   const bestLineage = tracker.observe(creatures, runTick)
   if (!bestLineage?.bestRepresentative) {
-    return loadAutoChampionRecord()
+    const champion = loadAutoChampionRecord()
+    return { champion, hall, crowned: false }
   }
 
-  const fitness = tracker.fitnessOf(bestLineage)
-  const stored = loadAutoChampionRecord()
-  if (stored && fitness <= stored.fitnessScore) {
-    return stored
-  }
-
-  const record = buildLineageChampionRecord(
+  const candidate = buildLineageChampionRecord(
     bestLineage.bestRepresentative,
-    fitness,
+    tracker.fitnessOf(bestLineage),
     runSeed,
     runTick,
     {
@@ -128,6 +142,12 @@ export function tryUpdateAutoChampion(
       observationCount: bestLineage.observationCount,
     },
   )
-  saveAutoChampionRecord(record)
-  return record
+
+  const { hall: nextHall, crowned } = crownInHall(hall, candidate)
+  if (crowned) {
+    saveChampionHall(CREATURE_CHAMPION_HALL_KEY, nextHall)
+  }
+
+  const champion = loadAutoChampionRecord()
+  return { champion, hall: crowned ? nextHall : hall, crowned }
 }

@@ -25,6 +25,10 @@ export type SimSettings = {
   founderPreferenceNoise: number
   /** Saved genome id per group slot; empty string = random founder DNA. */
   groupFounders: string[]
+  /** Re-seed at least one plant from the saved best species on each reset. */
+  respawnBestPlantSpecies: boolean
+  /** Saved plant genome id; empty = use auto plant champion. */
+  plantFounderId: string
 }
 
 export type FounderSettings = Pick<
@@ -44,6 +48,8 @@ export const DEFAULT_SIM_SETTINGS: SimSettings = {
   founderJitterChance: FOUNDER_GENE_JITTER_CHANCE,
   founderPreferenceNoise: FOUNDER_PREFERENCE_NOISE,
   groupFounders: Array.from({ length: MAX_CREATURE_GROUPS }, () => ''),
+  respawnBestPlantSpecies: true,
+  plantFounderId: '',
 }
 
 export function totalStartingHerbivores(settings: SimSettings): number {

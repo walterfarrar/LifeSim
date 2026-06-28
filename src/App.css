@@ -210,6 +210,11 @@ button:hover {
   font-size: 0.85rem;
 }
 
+.settings-field-checkbox input[type='checkbox'] {
+  width: auto;
+  margin-top: 0.25rem;
+}
+
 .settings-fields-wide {
   grid-template-columns: 1fr;
 }
@@ -567,6 +572,103 @@ button:hover {
 .champion-modal {
   width: min(680px, 100%);
   max-height: min(92vh, 860px);
+}
+
+.champion-hall-modal {
+  width: min(920px, 100%);
+}
+
+.champion-hall-tabs {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0 0.75rem 0.65rem;
+  border-bottom: 1px solid #1d2a21;
+}
+
+.champion-hall-tab {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #243528;
+  border-radius: 999px;
+  background: #0d120f;
+  color: #9db0a3;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.champion-hall-tab.active {
+  border-color: #3d6b4f;
+  background: #152018;
+  color: #c8e8d0;
+}
+
+.champion-hall-body {
+  min-height: 320px;
+}
+
+.champion-hall-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 0.85rem;
+}
+
+.champion-hall-rankings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.champion-hall-rank {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.45rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #243528;
+  border-radius: 8px;
+  background: #0d120f;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.champion-hall-rank.active {
+  border-color: #3d6b4f;
+  background: #152018;
+}
+
+.champion-hall-rank-num {
+  color: #7d9684;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.champion-hall-rank-name {
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.champion-hall-rank-score {
+  color: #8ec99a;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.champion-hall-detail {
+  min-width: 0;
+}
+
+.settings-hint-block {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0 0.75rem;
 }
 
 .champion-modal-header {

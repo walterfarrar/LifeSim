@@ -5,11 +5,13 @@ import {
   antigenMatch,
   createRandomPathogen,
   DISEASE_SPREAD_RANGE,
+  driftPathogenGenome,
   immuneProfileFromDna,
   MAX_PATHOGEN_STRAINS,
   MIN_INFECTION_CHANCE,
   MIN_SEVERITY_FLOOR,
   mutatePathogenOnSpread,
+  pathogenTraits,
   type Pathogen,
 } from './pathogen'
 
@@ -30,7 +32,8 @@ function exposureSusceptibility(
   pathogen: Pathogen,
   traits = creatureTraits(creature),
 ): number {
-  const match = antigenMatch(immuneProfileFromDna(creature.dna), pathogen.antigens)
+  const strain = pathogenTraits(pathogen)
+  const match = antigenMatch(immuneProfileFromDna(creature.dna), strain.antigens)
   const resist =
     traits.diseaseResistance * 0.52 +
     match * traits.diseaseResistance * 0.28 +
@@ -98,6 +101,7 @@ function spreadInfections(creatures: Creature[], pathogens: Pathogen[], rng: Rng
     }
 
     const sourceTraits = creatureTraits(source)
+    const strainTraits = pathogenTraits(strain)
     const spreadRange = DISEASE_SPREAD_RANGE + sourceTraits.contagion * 18
 
     for (const target of creatures) {
@@ -114,7 +118,7 @@ function spreadInfections(creatures: Creature[], pathogens: Pathogen[], rng: Rng
       const targetTraits = creatureTraits(target)
       const susceptibility = exposureSusceptibility(target, strain, targetTraits)
       const transmission =
-        strain.transmissibility *
+        strainTraits.transmissibility *
         (0.35 + source.infection.severity * 0.65) *
         (0.4 + sourceTraits.contagion * 0.6) *
         susceptibility
@@ -142,7 +146,8 @@ function applyInfectionHarm(creatures: Creature[], pathogens: Pathogen[]): void 
 
     creature.infection.ticksInfected += 1
     const traits = creatureTraits(creature)
-    const match = antigenMatch(immuneProfileFromDna(creature.dna), strain.antigens)
+    const strainTraits = pathogenTraits(strain)
+    const match = antigenMatch(immuneProfileFromDna(creature.dna), strainTraits.antigens)
     const mitigated = Math.min(0.78, traits.diseaseResistance * 0.5 + match * 0.28)
 
     const effectiveSeverity = Math.max(
@@ -151,7 +156,7 @@ function applyInfectionHarm(creatures: Creature[], pathogens: Pathogen[]): void 
     )
 
     const harm =
-      effectiveSeverity * strain.virulence * (0.35 + creature.infection.ticksInfected * 0.002)
+      effectiveSeverity * strainTraits.virulence * (0.35 + creature.infection.ticksInfected * 0.002)
     creature.energy -= harm + traits.metabolism * effectiveSeverity * 0.15
 
     if (creature.infection.ticksInfected % 40 === 0) {
@@ -170,7 +175,8 @@ function tickRecoveries(creatures: Creature[], pathogens: Pathogen[], rng: Rng):
 
     const traits = creatureTraits(creature)
     const strain = pathogenById(pathogens, creature.infection.pathogenId)!
-    const match = antigenMatch(immuneProfileFromDna(creature.dna), strain.antigens)
+    const strainTraits = pathogenTraits(strain)
+    const match = antigenMatch(immuneProfileFromDna(creature.dna), strainTraits.antigens)
     const recovery =
       traits.diseaseRecovery * 0.004 + match * 0.002 + (creature.mode === 'sleepy' ? 0.002 : 0)
 
@@ -185,10 +191,7 @@ function driftEndemicStrains(pathogens: Pathogen[], rng: Rng, tick: number): voi
   if (tick % 600 !== 0) return
   for (const strain of pathogens) {
     if (!rng.chance(0.35)) continue
-    strain.antigens = strain.antigens.map((v) =>
-      Math.max(0, Math.min(255, v + rng.int(-6, 6))),
-    ) as [number, number, number]
-    strain.virulence = Math.max(0.08, Math.min(0.75, strain.virulence + rng.range(-0.02, 0.025)))
+    driftPathogenGenome(strain, rng)
   }
 }
 

@@ -7,9 +7,10 @@ function fmt(value: number, digits = 1): string {
 
 type GenomeDnaTableProps = {
   dna: DNA
+  labels?: Record<number, string>
 }
 
-export function GenomeDnaTable({ dna }: GenomeDnaTableProps) {
+export function GenomeDnaTable({ dna, labels }: GenomeDnaTableProps) {
   return (
     <div className="dna-table-wrap">
       <table className="dna-table">
@@ -25,7 +26,7 @@ export function GenomeDnaTable({ dna }: GenomeDnaTableProps) {
           {Array.from(dna, (allele, index) => (
             <tr key={index}>
               <td>{index}</td>
-              <td>{HERBIVORE_GENE_LABELS[index] ?? `Gene ${index}`}</td>
+              <td>{labels?.[index] ?? HERBIVORE_GENE_LABELS[index] ?? `Gene ${index}`}</td>
               <td>{allele}</td>
               <td>{fmt((allele / 255) * 100, 0)}%</td>
             </tr>

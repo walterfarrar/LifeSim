@@ -27,6 +27,25 @@ export function createPlant(
   initialEnergy?: number,
 ): Plant {
   const dna = parentDna ? mutatePlant(cloneDNA(parentDna), rng) : createRandomDNA(rng, PLANT_GENE_COUNT)
+  return buildPlant(rng, dna, position, initialEnergy)
+}
+
+/** Spawn an exact genome — used when re-seeding the all-time plant champion. */
+export function createPlantWithDna(
+  rng: Rng,
+  dna: Plant['dna'],
+  position?: Vec2,
+  initialEnergy?: number,
+): Plant {
+  return buildPlant(rng, cloneDNA(dna), position, initialEnergy)
+}
+
+function buildPlant(
+  rng: Rng,
+  dna: Plant['dna'],
+  position?: Vec2,
+  initialEnergy?: number,
+): Plant {
   const traits = expressPlant(dna)
   return {
     kind: 'plant',

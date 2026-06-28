@@ -10,6 +10,7 @@ import {
 } from './disease/pathogen'
 import { tickDiseaseSystem } from './disease/diseaseSystem'
 import { resolveGroupFounderDnas } from './founderGenomes'
+import { resolvePlantChampionDna } from './plantFounderGenomes'
 import {
   DEFAULT_SIM_SETTINGS,
   type SimSettings,
@@ -43,6 +44,7 @@ import {
   bitePlant,
   createPlant,
   createPlantNear,
+  createPlantWithDna,
   growPlant,
   isPlantEdible,
   plantTraits,
@@ -131,7 +133,12 @@ export class World {
     this.primaryProductionThisTick = 0
 
     for (let i = 0; i < this.settings.initialPlants; i++) {
-      this.plants.push(createPlant(this.rng))
+      const championDna = i === 0 ? resolvePlantChampionDna(this.settings) : null
+      if (championDna) {
+        this.plants.push(createPlantWithDna(this.rng, championDna))
+      } else {
+        this.plants.push(createPlant(this.rng))
+      }
     }
 
     const founderSettings = {
@@ -181,6 +188,7 @@ export class World {
       plants: this.plants,
       corpses: this.corpses,
       creatures: this.creatures,
+      pathogens: this.pathogens,
       stats: { ...this.stats },
     }
   }

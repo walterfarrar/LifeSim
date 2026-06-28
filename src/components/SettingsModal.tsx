@@ -3,6 +3,8 @@ import {
   AUTO_CHAMPION_GENOME_ID,
   type AutoChampionRecord,
 } from '../sim/autoChampion'
+import type { AutoPlantChampionRecord } from '../sim/plantAutoChampion'
+import type { AutoPathogenChampionRecord } from '../sim/pathogenAutoChampion'
 import { getFounderGenomeById, listFounderGenomeChoices } from '../sim/founderGenomes'
 import type { SavedGenome } from '../sim/dnaExport'
 import type { SimSettings } from '../sim/simSettings'
@@ -15,6 +17,8 @@ type SettingsModalProps = {
   active: SimSettings
   seed: number
   autoChampion: AutoChampionRecord | null
+  autoPlantChampion: AutoPlantChampionRecord | null
+  autoPathogenChampion: AutoPathogenChampionRecord | null
   onChange: (next: SimSettings) => void
   onStart: (newSeed: boolean) => void
   onClose: () => void
@@ -88,6 +92,8 @@ export function SettingsModal({
   active,
   seed,
   autoChampion,
+  autoPlantChampion,
+  autoPathogenChampion,
   onChange,
   onStart,
   onClose,
@@ -197,6 +203,27 @@ export function SettingsModal({
                 max={200}
                 onChange={(plantLowCountBoost) => onChange(patch(draft, { plantLowCountBoost }))}
               />
+              <label className="settings-field settings-field-checkbox">
+                <span className="settings-label">Respawn best plant species</span>
+                <span className="settings-hint">
+                  {autoPlantChampion
+                    ? `Guarantees 1× "${autoPlantChampion.genome.name}" at reset (peak ${autoPlantChampion.peakPopulation})`
+                    : 'No plant champion saved yet — tracked once a minute while plants live'}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={draft.respawnBestPlantSpecies}
+                  onChange={(event) =>
+                    onChange(patch(draft, { respawnBestPlantSpecies: event.target.checked }))
+                  }
+                />
+              </label>
+              {autoPathogenChampion && (
+                <p className="settings-hint settings-hint-block">
+                  Best disease saved: peak {autoPathogenChampion.peakInfected} infected — view in Hall
+                  of fame.
+                </p>
+              )}
             </div>
           </details>
 

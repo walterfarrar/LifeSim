@@ -35,6 +35,8 @@ function sanitizeSettings(raw: Partial<SimSettings>): SimSettings {
     founderJitterChance: clamp(Number(raw.founderJitterChance ?? base.founderJitterChance), 0, 1),
     founderPreferenceNoise: clamp(Math.round(raw.founderPreferenceNoise ?? base.founderPreferenceNoise), 0, 40),
     groupFounders: sanitizeGroupFounders(raw.groupFounders, validGenomeIds),
+    respawnBestPlantSpecies: raw.respawnBestPlantSpecies !== false,
+    plantFounderId: '',
   }
 }
 

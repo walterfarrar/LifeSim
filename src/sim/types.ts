@@ -1,5 +1,5 @@
 import type { DNA } from './dna'
-import type { Infection } from './disease/pathogen'
+import type { Infection, Pathogen } from './disease/pathogen'
 import type { CreatureShape } from './genes'
 
 export type Vec2 = { x: number; y: number }
@@ -87,5 +87,6 @@ export interface WorldSnapshot {
   plants: readonly Plant[]
   corpses: readonly Corpse[]
   creatures: readonly Creature[]
+  pathogens: readonly Pathogen[]
   stats: WorldStats
 }

@@ -1,13 +1,11 @@
-import type { DNA } from '../dna'
-import { HerbivoreGene } from '../genes'
+import { cloneDNA, createRandomDNA, geneValue, type DNA } from '../dna'
+import { HerbivoreGene, PATHOGEN_GENE_COUNT, PathogenGene, type PathogenExpressedTraits } from '../genes'
 import type { Rng } from '../rng'
 
-/** Evolving pathogen strain — antigens drift to evade host resistance profiles. */
+/** Evolving pathogen strain — genome drives antigens and transmission. */
 export type Pathogen = {
   id: number
-  antigens: [number, number, number]
-  virulence: number
-  transmissibility: number
+  dna: DNA
   generation: number
 }
 
@@ -32,18 +30,36 @@ function clampByte(value: number): number {
   return Math.max(0, Math.min(255, Math.round(value)))
 }
 
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value))
+export function expressPathogen(dna: DNA): PathogenExpressedTraits {
+  const g = (gene: (typeof PathogenGene)[keyof typeof PathogenGene]) => geneValue(dna, gene)
+  return {
+    antigens: [
+      clampByte(dna[PathogenGene.Antigen0]),
+      clampByte(dna[PathogenGene.Antigen1]),
+      clampByte(dna[PathogenGene.Antigen2]),
+    ],
+    virulence: 0.08 + g(PathogenGene.Virulence) * 0.67,
+    transmissibility: 0.08 + g(PathogenGene.Transmissibility) * 0.42,
+  }
+}
+
+export function pathogenTraits(pathogen: Pathogen): PathogenExpressedTraits {
+  return expressPathogen(pathogen.dna)
+}
+
+export function createPathogenFromDna(dna: DNA, generation = 0): Pathogen {
+  return {
+    id: nextPathogenId++,
+    dna: cloneDNA(dna),
+    generation,
+  }
 }
 
 export function createRandomPathogen(rng: Rng): Pathogen {
-  return {
-    id: nextPathogenId++,
-    antigens: [rng.int(0, 255), rng.int(0, 255), rng.int(0, 255)],
-    virulence: rng.range(0.12, 0.55),
-    transmissibility: rng.range(0.08, 0.42),
-    generation: 0,
-  }
+  const dna = createRandomDNA(rng, PATHOGEN_GENE_COUNT)
+  dna[PathogenGene.Virulence] = rng.int(40, 200)
+  dna[PathogenGene.Transmissibility] = rng.int(30, 180)
+  return createPathogenFromDna(dna, 0)
 }
 
 export function createInitialPathogens(rng: Rng, count: number): Pathogen[] {
@@ -51,21 +67,30 @@ export function createInitialPathogens(rng: Rng, count: number): Pathogen[] {
 }
 
 export function clonePathogen(pathogen: Pathogen): Pathogen {
-  return { ...pathogen, antigens: [...pathogen.antigens] as [number, number, number] }
+  return {
+    id: pathogen.id,
+    dna: cloneDNA(pathogen.dna),
+    generation: pathogen.generation,
+  }
 }
 
-/** Offspring strain — antigens and traits drift on transmission. */
+/** Offspring strain — genome drifts on transmission. */
 export function mutatePathogenOnSpread(pathogen: Pathogen, rng: Rng): Pathogen {
-  return {
-    id: nextPathogenId++,
-    antigens: [
-      clampByte(pathogen.antigens[0] + rng.int(-10, 10)),
-      clampByte(pathogen.antigens[1] + rng.int(-10, 10)),
-      clampByte(pathogen.antigens[2] + rng.int(-10, 10)),
-    ],
-    virulence: clamp01(pathogen.virulence + rng.range(-0.025, 0.035)),
-    transmissibility: clamp01(pathogen.transmissibility + rng.range(-0.02, 0.03)),
-    generation: pathogen.generation + 1,
+  const next = cloneDNA(pathogen.dna)
+  next[PathogenGene.Antigen0] = clampByte(next[PathogenGene.Antigen0] + rng.int(-10, 10))
+  next[PathogenGene.Antigen1] = clampByte(next[PathogenGene.Antigen1] + rng.int(-10, 10))
+  next[PathogenGene.Antigen2] = clampByte(next[PathogenGene.Antigen2] + rng.int(-10, 10))
+  next[PathogenGene.Virulence] = clampByte(next[PathogenGene.Virulence] + rng.int(-8, 12))
+  next[PathogenGene.Transmissibility] = clampByte(
+    next[PathogenGene.Transmissibility] + rng.int(-6, 10),
+  )
+  return createPathogenFromDna(next, pathogen.generation + 1)
+}
+
+export function driftPathogenGenome(pathogen: Pathogen, rng: Rng): void {
+  for (let i = 0; i < PATHOGEN_GENE_COUNT; i++) {
+    if (!rng.chance(0.35)) continue
+    pathogen.dna[i] = clampByte(pathogen.dna[i] + rng.int(-6, 6))
   }
 }
 

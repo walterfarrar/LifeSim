@@ -1,4 +1,4 @@
-import { HerbivoreGene } from './genes'
+import { HerbivoreGene, PathogenGene, PlantGene } from './genes'
 
 export const HERBIVORE_GENE_LABELS: Record<number, string> = {
   [HerbivoreGene.Speed]: 'Speed',
@@ -53,4 +53,30 @@ export const HERBIVORE_GENE_LABELS: Record<number, string> = {
   [HerbivoreGene.Contagion]: 'Contagion',
   [HerbivoreGene.CourtshipEagerness]: 'Courtship eagerness',
   [HerbivoreGene.CloseMateLeniency]: 'Close mate leniency',
+}
+
+export const PLANT_GENE_LABELS: Record<number, string> = {
+  [PlantGene.GreenHue]: 'Green hue',
+  [PlantGene.Saturation]: 'Saturation',
+  [PlantGene.Lightness]: 'Lightness',
+  [PlantGene.MaxEnergy]: 'Max energy',
+  [PlantGene.GrowthRate]: 'Growth rate',
+  [PlantGene.SpreadMin]: 'Spread min',
+  [PlantGene.SpreadMax]: 'Spread max',
+  [PlantGene.Maturation]: 'Maturation',
+  [PlantGene.Reproduction]: 'Reproduction',
+  [PlantGene.BaseRadius]: 'Base radius',
+  [PlantGene.MutationRate]: 'Mutation rate',
+  [PlantGene.MutationAmount]: 'Mutation amount',
+  [PlantGene.Hardiness]: 'Hardiness',
+  [PlantGene.LeafLobes]: 'Leaf lobes',
+  [PlantGene.LeafPointiness]: 'Leaf pointiness',
+}
+
+export const PATHOGEN_GENE_LABELS: Record<number, string> = {
+  [PathogenGene.Antigen0]: 'Antigen A',
+  [PathogenGene.Antigen1]: 'Antigen B',
+  [PathogenGene.Antigen2]: 'Antigen C',
+  [PathogenGene.Virulence]: 'Virulence',
+  [PathogenGene.Transmissibility]: 'Transmissibility',
 }
