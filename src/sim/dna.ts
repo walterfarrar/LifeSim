@@ -102,6 +102,9 @@ export function createMultiGroupPopulation(
   for (let group = 0; group < groupCount; group++) {
     const savedFounder = groupFounderDna?.[group]
     const founder = savedFounder ? cloneDNA(savedFounder) : createFounderGroupDNA(rng, group, groupCount)
+    if (savedFounder) {
+      alignMatePreferencesToBody(founder, rng, founderSettings.founderPreferenceNoise)
+    }
     const row = Math.floor(group / cols)
     const col = group % cols
     const centerX = (WORLD_WIDTH / (cols + 1)) * (col + 1)

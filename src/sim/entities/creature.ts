@@ -107,17 +107,17 @@ export function needsFood(creature: Creature): boolean {
 /** What mode instincts want right now — before stickiness is applied. */
 export function desiredMode(creature: Creature): Creature['mode'] {
   const hungryEnter = hungryEnterLine(creature)
-  const hungryExit = hungryExitLine(creature)
+  const hornyAt = reproduceModeThreshold(creature)
   const traits = creatureTraits(creature)
   const minEnergyToSleep = traits.reproThreshold * traits.minSleepEnergyRatio
 
-  if (creature.energy < hungryEnter || (creature.mode === 'hungry' && creature.energy < hungryExit)) {
+  if (creature.energy < hungryEnter || (creature.mode === 'hungry' && creature.energy < hornyAt)) {
     return 'hungry'
   }
   if (creature.fatigue >= traits.sleepFatigueThreshold && creature.energy >= minEnergyToSleep) {
     return 'sleepy'
   }
-  if (canSeekMate(creature) && creature.energy >= hungryExit) {
+  if (canSeekMate(creature) && creature.energy >= hornyAt) {
     return 'horny'
   }
   return 'hungry'
@@ -181,6 +181,14 @@ export function canReproduce(creature: Creature): boolean {
 export function mateEnergyMinimum(creature: Creature): number {
   const traits = creatureTraits(creature)
   return traits.reproThreshold * (1 - traits.mateLibidoFactor)
+}
+
+/** Energy needed to enter horny mode — lower than full satiety so mating happens while foraging. */
+export function reproduceModeThreshold(creature: Creature): number {
+  const enter = hungryEnterLine(creature)
+  const exit = hungryExitLine(creature)
+  const mateMin = mateEnergyMinimum(creature)
+  return Math.max(mateMin, enter + (exit - enter) * 0.38)
 }
 
 export function canSeekMate(creature: Creature): boolean {

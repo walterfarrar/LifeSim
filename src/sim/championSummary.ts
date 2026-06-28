@@ -321,7 +321,7 @@ export function summarizeChampion(
 
   const intro =
     `This lineage peaked at ${record.peakPopulation} members, stayed together for ${formatYears(record.lineageSpanTicks)}, ` +
-    `and scored ${record.fitnessScore.toFixed(0)} fitness — the sim rewards big, mature, reproducing groups that persist.`
+    `and scored ${record.fitnessScore.toFixed(0)} fitness — the sim rewards population, persistence, and observed pregnancies in the group.`
 
   const bodyParts: string[] = []
   bodyParts.push(

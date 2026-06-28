@@ -19,6 +19,8 @@ export type TrackedLineage = {
   lastPopulation: number
   cumulativeScore: number
   observationCount: number
+  cumulativePregnancies: number
+  peakPregnant: number
   bestRepresentative: Creature | null
 }
 
@@ -64,6 +66,8 @@ export class LineageTracker {
       lineage.peakPopulation,
       lineage.lastSeenTick - lineage.firstSeenTick,
       lineage.lastPopulation,
+      lineage.cumulativePregnancies,
+      lineage.peakPregnant,
     )
   }
 
@@ -95,6 +99,8 @@ export class LineageTracker {
       lastPopulation: cluster.members.length,
       cumulativeScore: 0,
       observationCount: 0,
+      cumulativePregnancies: 0,
+      peakPregnant: 0,
       bestRepresentative: pickLineageRepresentative(cluster.members),
     }
     this.lineages.push(created)
@@ -108,10 +114,13 @@ export class LineageTracker {
   ): void {
     const snapshot = lineageFitnessSnapshot(cluster)
     const representative = pickLineageRepresentative(cluster.members)
+    const pregnantCount = cluster.members.filter((m) => m.pregnancyTicksRemaining > 0).length
 
     lineage.lastSeenTick = tick
     lineage.lastPopulation = snapshot.population
     lineage.peakPopulation = Math.max(lineage.peakPopulation, snapshot.population)
+    lineage.peakPregnant = Math.max(lineage.peakPregnant, pregnantCount)
+    lineage.cumulativePregnancies += pregnantCount
     lineage.cumulativeScore += snapshot.instantScore
     lineage.observationCount += 1
     lineage.centroidGenes = dnaToGeneArray(cluster.centroid)

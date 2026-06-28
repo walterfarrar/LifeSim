@@ -34,9 +34,11 @@ export function scoreLineageInstant(cluster: LineageCluster): number {
   const cohesionScore = matureRatio * population * 180
   const ageScore = avgAge * 0.65
   const vitalityScore = avgEnergy * matureCount * 120
-  const reproScore = pregnantCount * 160
+  const reproScore = pregnantCount * 520
+  const fertilityRate = population > 0 ? pregnantCount / population : 0
+  const fertilityBonus = fertilityRate >= 0.08 ? population * fertilityRate * 220 : 0
 
-  return populationScore + maturityScore + cohesionScore + ageScore + vitalityScore + reproScore
+  return populationScore + maturityScore + cohesionScore + ageScore + vitalityScore + reproScore + fertilityBonus
 }
 
 export type LineageFitnessSnapshot = {
@@ -73,8 +75,11 @@ export function lineageTotalFitness(
   peakPopulation: number,
   spanTicks: number,
   lastPopulation: number,
+  cumulativePregnancies: number,
+  peakPregnant: number,
 ): number {
   const persistence = spanTicks * (0.08 + lastPopulation * 0.04)
   const peakBonus = peakPopulation * peakPopulation * 45
-  return cumulativeScore + persistence + peakBonus
+  const fertilityBonus = cumulativePregnancies * 85 + peakPregnant * peakPregnant * 120
+  return cumulativeScore + persistence + peakBonus + fertilityBonus
 }
