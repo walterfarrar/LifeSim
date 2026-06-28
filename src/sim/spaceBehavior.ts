@@ -19,16 +19,21 @@ export type SpaceReaction =
   | { kind: 'chase'; intruder: Creature }
   | { kind: 'attack'; intruder: Creature }
 
-function isMatingCloseness(a: Creature, b: Creature): boolean {
+/** Horny, willing pairs may enter personal space without fleeing while closing to mate range. */
+function isMatingCourtship(a: Creature, b: Creature): boolean {
   if (a.mode !== 'horny' || b.mode !== 'horny') return false
   if (a.sex === b.sex) return false
-  if (!canSeekMate(a) && !canSeekMate(b)) return false
+  if (!canSeekMate(a) || !canSeekMate(b)) return false
 
+  const traitsA = creatureTraits(a)
+  const traitsB = creatureTraits(b)
   const dist = toroidalDistance(a, b)
-  const range = mateProximity(a, b)
-  if (dist > range) return false
+  const mateRange = mateProximity(a, b)
+  const courtshipRange = Math.max(mateRange, traitsA.vision, traitsB.vision)
 
-  return mutuallyAcceptMate(a, b, dist, range)
+  if (dist > courtshipRange) return false
+
+  return mutuallyAcceptMate(a, b, dist, mateRange)
 }
 
 function findClosestIntruder(creature: Creature, others: readonly Creature[]): Creature | null {
@@ -40,7 +45,7 @@ function findClosestIntruder(creature: Creature, others: readonly Creature[]): C
     if (other.id === creature.id) continue
     const dist = toroidalDistance(creature, other)
     if (dist >= traits.personalSpace) continue
-    if (isMatingCloseness(creature, other)) continue
+    if (isMatingCourtship(creature, other)) continue
     if (dist < closestDist) {
       closestDist = dist
       intruder = other
