@@ -3,13 +3,14 @@ import { dnaToGeneArray } from '../dnaExport'
 import type { Plant } from '../types'
 import {
   clusterPlantsIntoSpecies,
+  MIN_PLANT_SPECIES_POPULATION,
   pickPlantSpeciesRepresentative,
   plantSpeciesSimilarity,
   type PlantSpeciesCluster,
 } from './plantSpeciesCluster'
 import {
+  plantSpeciesCrownFitness,
   plantSpeciesFitnessSnapshot,
-  plantSpeciesTotalFitness,
 } from './plantSpeciesFitness'
 
 export type TrackedPlantSpecies = {
@@ -23,6 +24,7 @@ export type TrackedPlantSpecies = {
   peakBiomass: number
   cumulativeScore: number
   observationCount: number
+  lastInstantScore: number
   bestRepresentative: Plant | null
 }
 
@@ -52,6 +54,7 @@ export class PlantSpeciesTracker {
     let bestFitness = -1
 
     for (const species of this.species) {
+      if (species.lastPopulation < MIN_PLANT_SPECIES_POPULATION) continue
       const fitness = this.fitnessOf(species)
       if (fitness > bestFitness) {
         bestFitness = fitness
@@ -63,11 +66,16 @@ export class PlantSpeciesTracker {
   }
 
   fitnessOf(species: TrackedPlantSpecies): number {
-    return plantSpeciesTotalFitness(
-      species.cumulativeScore,
+    return plantSpeciesCrownFitness(
+      {
+        instantScore: species.lastInstantScore,
+        population: species.lastPopulation,
+        matureCount: 0,
+        totalEnergy: 0,
+        avgAge: 0,
+      },
       species.peakPopulation,
       species.lastSeenTick - species.firstSeenTick,
-      species.lastPopulation,
       species.peakBiomass,
     )
   }
@@ -104,6 +112,7 @@ export class PlantSpeciesTracker {
       peakBiomass: cluster.members.reduce((sum, plant) => sum + plant.energy, 0),
       cumulativeScore: 0,
       observationCount: 0,
+      lastInstantScore: 0,
       bestRepresentative: pickPlantSpeciesRepresentative(cluster.members),
     }
     this.species.push(created)
@@ -125,6 +134,7 @@ export class PlantSpeciesTracker {
     species.peakBiomass = Math.max(species.peakBiomass, biomass)
     species.cumulativeScore += snapshot.instantScore
     species.observationCount += 1
+    species.lastInstantScore = snapshot.instantScore
     species.centroidGenes = dnaToGeneArray(cluster.centroid)
     species.representativeGenes = dnaToGeneArray(representative.dna)
     species.bestRepresentative = representative

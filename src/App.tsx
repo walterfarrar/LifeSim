@@ -92,9 +92,6 @@ function App() {
 
   useEffect(() => {
     setSelectedId(null)
-    lineageTrackerRef.current.reset()
-    plantSpeciesTrackerRef.current.reset()
-    pathogenStrainTrackerRef.current.reset()
     setAutoChampion(loadAutoChampionRecord())
     setAutoPlantChampion(loadAutoPlantChampionRecord())
     setAutoPathogenChampion(loadAutoPathogenChampionRecord())

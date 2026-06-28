@@ -48,15 +48,14 @@ export function pathogenStrainFitnessSnapshot(
   }
 }
 
-export function pathogenStrainTotalFitness(
-  cumulativeScore: number,
+export function pathogenStrainCrownFitness(
+  snapshot: PathogenStrainFitnessSnapshot,
   peakInfected: number,
   spanTicks: number,
-  lastInfected: number,
   peakStrainCount: number,
 ): number {
-  const persistence = spanTicks * (0.05 + lastInfected * 0.04)
+  const persistence = spanTicks * (0.05 + snapshot.infectedCount * 0.04)
   const peakBonus = peakInfected * peakInfected * 55
   const diversityBonus = peakStrainCount * peakStrainCount * 30
-  return cumulativeScore + persistence + peakBonus + diversityBonus
+  return snapshot.instantScore + persistence + peakBonus + diversityBonus
 }

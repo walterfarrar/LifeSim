@@ -8,22 +8,23 @@ export type ChampionHallEntry = {
   savedAt: string
 }
 
-/** Insert a new reigning champion at the top; keep only the top N by fitness. */
+/** Insert into the hall when reigning is beaten, or when the candidate qualifies for the top N. */
 export function crownInHall<T extends ChampionHallEntry>(
   hall: readonly T[],
   candidate: T,
 ): { hall: T[]; crowned: boolean } {
   const reigning = hall[0] ?? null
-  if (reigning && candidate.fitnessScore <= reigning.fitnessScore) {
+  const withoutDuplicate = hall.filter((entry) => entry.entryId !== candidate.entryId)
+  const sorted = [...withoutDuplicate, candidate].sort((a, b) => b.fitnessScore - a.fitnessScore)
+  const next = sorted.slice(0, CHAMPION_HALL_MAX)
+  const madeHall = next.some((entry) => entry.entryId === candidate.entryId)
+
+  if (!madeHall) {
     return { hall: [...hall], crowned: false }
   }
 
-  const withoutDuplicate = hall.filter((entry) => entry.entryId !== candidate.entryId)
-  const next = [candidate, ...withoutDuplicate]
-    .sort((a, b) => b.fitnessScore - a.fitnessScore)
-    .slice(0, CHAMPION_HALL_MAX)
-
-  return { hall: next, crowned: true }
+  const beatReigning = !reigning || candidate.fitnessScore > reigning.fitnessScore
+  return { hall: next, crowned: beatReigning }
 }
 
 export function loadChampionHall<T extends ChampionHallEntry>(

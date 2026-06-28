@@ -10,8 +10,8 @@ import {
   type PathogenStrainCluster,
 } from './pathogenStrainCluster'
 import {
+  pathogenStrainCrownFitness,
   pathogenStrainFitnessSnapshot,
-  pathogenStrainTotalFitness,
 } from './pathogenStrainFitness'
 
 export type TrackedPathogenStrain = {
@@ -25,6 +25,7 @@ export type TrackedPathogenStrain = {
   peakStrainCount: number
   cumulativeScore: number
   observationCount: number
+  lastInstantScore: number
   bestRepresentative: Pathogen | null
 }
 
@@ -62,6 +63,7 @@ export class PathogenStrainTracker {
     let bestFitness = -1
 
     for (const strain of this.strains) {
+      if (strain.lastInfected <= 0) continue
       const fitness = this.fitnessOf(strain)
       if (fitness > bestFitness) {
         bestFitness = fitness
@@ -73,11 +75,15 @@ export class PathogenStrainTracker {
   }
 
   fitnessOf(strain: TrackedPathogenStrain): number {
-    return pathogenStrainTotalFitness(
-      strain.cumulativeScore,
+    return pathogenStrainCrownFitness(
+      {
+        instantScore: strain.lastInstantScore,
+        infectedCount: strain.lastInfected,
+        severitySum: 0,
+        strainCount: strain.peakStrainCount,
+      },
       strain.peakInfected,
       strain.lastSeenTick - strain.firstSeenTick,
-      strain.lastInfected,
       strain.peakStrainCount,
     )
   }
@@ -114,6 +120,7 @@ export class PathogenStrainTracker {
       peakStrainCount: cluster.members.length,
       cumulativeScore: 0,
       observationCount: 0,
+      lastInstantScore: 0,
       bestRepresentative: pickPathogenStrainRepresentative(cluster.members),
     }
     this.strains.push(created)
@@ -134,6 +141,7 @@ export class PathogenStrainTracker {
     strain.peakStrainCount = Math.max(strain.peakStrainCount, snapshot.strainCount)
     strain.cumulativeScore += snapshot.instantScore
     strain.observationCount += 1
+    strain.lastInstantScore = snapshot.instantScore
     strain.centroidGenes = dnaToGeneArray(cluster.centroid)
     strain.representativeGenes = dnaToGeneArray(representative.dna)
     strain.bestRepresentative = representative

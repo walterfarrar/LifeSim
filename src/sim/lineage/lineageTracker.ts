@@ -4,10 +4,11 @@ import type { Creature } from '../types'
 import {
   clusterCreaturesIntoLineages,
   lineageSimilarity,
+  MIN_LINEAGE_POPULATION,
   pickLineageRepresentative,
   type LineageCluster,
 } from './lineageCluster'
-import { lineageFitnessSnapshot, lineageTotalFitness } from './lineageFitness'
+import { lineageCrownFitness, lineageFitnessSnapshot } from './lineageFitness'
 
 export type TrackedLineage = {
   id: string
@@ -21,6 +22,7 @@ export type TrackedLineage = {
   observationCount: number
   cumulativePregnancies: number
   peakPregnant: number
+  lastInstantScore: number
   bestRepresentative: Creature | null
 }
 
@@ -50,7 +52,8 @@ export class LineageTracker {
     let bestFitness = -1
 
     for (const lineage of this.lineages) {
-      const fitness = this.fitnessOf(lineage)
+      if (lineage.lastPopulation < MIN_LINEAGE_POPULATION) continue
+      const fitness = this.crownFitnessOf(lineage)
       if (fitness > bestFitness) {
         bestFitness = fitness
         best = lineage
@@ -60,15 +63,23 @@ export class LineageTracker {
     return best
   }
 
-  fitnessOf(lineage: TrackedLineage): number {
-    return lineageTotalFitness(
-      lineage.cumulativeScore,
+  /** Fitness for hall crowning — based on current vigor, not lifetime cumulative alone. */
+  crownFitnessOf(lineage: TrackedLineage): number {
+    return lineageCrownFitness(
+      {
+        instantScore: lineage.lastInstantScore,
+        population: lineage.lastPopulation,
+        matureCount: 0,
+        avgAge: 0,
+      },
       lineage.peakPopulation,
       lineage.lastSeenTick - lineage.firstSeenTick,
-      lineage.lastPopulation,
-      lineage.cumulativePregnancies,
       lineage.peakPregnant,
     )
+  }
+
+  fitnessOf(lineage: TrackedLineage): number {
+    return this.crownFitnessOf(lineage)
   }
 
   private matchOrCreate(cluster: LineageCluster, tick: number): TrackedLineage {
@@ -101,6 +112,7 @@ export class LineageTracker {
       observationCount: 0,
       cumulativePregnancies: 0,
       peakPregnant: 0,
+      lastInstantScore: 0,
       bestRepresentative: pickLineageRepresentative(cluster.members),
     }
     this.lineages.push(created)
@@ -123,6 +135,7 @@ export class LineageTracker {
     lineage.cumulativePregnancies += pregnantCount
     lineage.cumulativeScore += snapshot.instantScore
     lineage.observationCount += 1
+    lineage.lastInstantScore = snapshot.instantScore
     lineage.centroidGenes = dnaToGeneArray(cluster.centroid)
     lineage.representativeGenes = dnaToGeneArray(representative.dna)
     lineage.bestRepresentative = representative

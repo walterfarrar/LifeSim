@@ -68,15 +68,14 @@ export function plantSpeciesFitnessSnapshot(cluster: PlantSpeciesCluster): Plant
   }
 }
 
-export function plantSpeciesTotalFitness(
-  cumulativeScore: number,
+export function plantSpeciesCrownFitness(
+  snapshot: PlantSpeciesFitnessSnapshot,
   peakPopulation: number,
   spanTicks: number,
-  lastPopulation: number,
   peakBiomass: number,
 ): number {
-  const persistence = spanTicks * (0.06 + lastPopulation * 0.035)
+  const persistence = spanTicks * (0.06 + snapshot.population * 0.035)
   const peakBonus = peakPopulation * peakPopulation * 38
   const biomassBonus = peakBiomass * 1.8
-  return cumulativeScore + persistence + peakBonus + biomassBonus
+  return snapshot.instantScore + persistence + peakBonus + biomassBonus
 }

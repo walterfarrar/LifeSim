@@ -69,17 +69,15 @@ export function lineageFitnessSnapshot(cluster: LineageCluster): LineageFitnessS
   }
 }
 
-/** Long-running score used to compare lineages across many observations. */
-export function lineageTotalFitness(
-  cumulativeScore: number,
+/** Score used to crown a new hall entry — snapshot strength, not unbounded cumulative history. */
+export function lineageCrownFitness(
+  snapshot: LineageFitnessSnapshot,
   peakPopulation: number,
   spanTicks: number,
-  lastPopulation: number,
-  cumulativePregnancies: number,
   peakPregnant: number,
 ): number {
-  const persistence = spanTicks * (0.08 + lastPopulation * 0.04)
+  const persistence = spanTicks * (0.08 + snapshot.population * 0.04)
   const peakBonus = peakPopulation * peakPopulation * 45
-  const fertilityBonus = cumulativePregnancies * 85 + peakPregnant * peakPregnant * 120
-  return cumulativeScore + persistence + peakBonus + fertilityBonus
+  const fertilityBonus = peakPregnant * peakPregnant * 120
+  return snapshot.instantScore + persistence + peakBonus + fertilityBonus
 }

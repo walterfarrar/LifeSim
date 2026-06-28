@@ -144,10 +144,16 @@ export function tryUpdateAutoChampion(
   )
 
   const { hall: nextHall, crowned } = crownInHall(hall, candidate)
-  if (crowned) {
+  const changed =
+    nextHall.length !== hall.length ||
+    nextHall.some((entry, index) => entry.entryId !== hall[index]?.entryId)
+  if (changed) {
     saveChampionHall(CREATURE_CHAMPION_HALL_KEY, nextHall)
   }
 
-  const champion = loadAutoChampionRecord()
-  return { champion, hall: crowned ? nextHall : hall, crowned }
+  return {
+    champion: loadAutoChampionRecord(),
+    hall: changed ? nextHall : hall,
+    crowned,
+  }
 }

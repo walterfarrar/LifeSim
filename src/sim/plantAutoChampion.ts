@@ -145,13 +145,16 @@ export function tryUpdateAutoPlantChampion(
   )
 
   const { hall: nextHall, crowned } = crownInHall(hall, candidate)
-  if (crowned) {
+  const changed =
+    nextHall.length !== hall.length ||
+    nextHall.some((entry, index) => entry.entryId !== hall[index]?.entryId)
+  if (changed) {
     saveChampionHall(PLANT_CHAMPION_HALL_KEY, nextHall)
   }
 
   return {
     champion: loadAutoPlantChampionRecord(),
-    hall: crowned ? nextHall : hall,
+    hall: changed ? nextHall : hall,
     crowned,
   }
 }

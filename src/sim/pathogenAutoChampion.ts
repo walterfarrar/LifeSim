@@ -132,13 +132,16 @@ export function tryUpdateAutoPathogenChampion(
   )
 
   const { hall: nextHall, crowned } = crownInHall(hall, candidate)
-  if (crowned) {
+  const changed =
+    nextHall.length !== hall.length ||
+    nextHall.some((entry, index) => entry.entryId !== hall[index]?.entryId)
+  if (changed) {
     saveChampionHall(PATHOGEN_CHAMPION_HALL_KEY, nextHall)
   }
 
   return {
     champion: loadAutoPathogenChampionRecord(),
-    hall: crowned ? nextHall : hall,
+    hall: changed ? nextHall : hall,
     crowned,
   }
 }
