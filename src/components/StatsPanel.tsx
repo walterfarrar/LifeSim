@@ -147,7 +147,9 @@ export function StatsPanel({
         {autoPathogenChampion && (
           <>
             {' '}
-            Disease #1: peak {autoPathogenChampion.peakInfected} infected.
+            Disease #1: peak {autoPathogenChampion.peakInfected} infected
+            {settings.respawnBestPathogen ? ' · in pool at reset' : ''}
+            {settings.pathogenChampionSpawnChance > 0 ? ' · may return mid-run' : ''}.
           </>
         )}
         {hasChampionHall && (

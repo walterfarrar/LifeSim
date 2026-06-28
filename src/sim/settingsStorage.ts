@@ -37,6 +37,13 @@ function sanitizeSettings(raw: Partial<SimSettings>): SimSettings {
     groupFounders: sanitizeGroupFounders(raw.groupFounders, validGenomeIds),
     respawnBestPlantSpecies: raw.respawnBestPlantSpecies !== false,
     plantFounderId: '',
+    respawnBestPathogen: raw.respawnBestPathogen !== false,
+    pathogenChampionSpawnChance: clamp(
+      Number(raw.pathogenChampionSpawnChance ?? base.pathogenChampionSpawnChance),
+      0,
+      1,
+    ),
+    pathogenFounderId: '',
   }
 }
 

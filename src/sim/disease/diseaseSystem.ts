@@ -1,8 +1,12 @@
 import { creatureTraits, toroidalDistance } from '../entities/creature'
 import type { Creature } from '../types'
 import type { Rng } from '../rng'
+import { PATHOGEN_CHAMPION_CHECK_INTERVAL } from '../config'
+import type { SimSettings } from '../simSettings'
+import { pickPathogenChampionDna } from '../pathogenFounderGenomes'
 import {
   antigenMatch,
+  createPathogenFromChampionDna,
   createRandomPathogen,
   DISEASE_SPREAD_RANGE,
   driftPathogenGenome,
@@ -64,7 +68,14 @@ export function tickDiseaseSystem(
   pathogens: Pathogen[],
   rng: Rng,
   tick: number,
+  settings?: SimSettings,
 ): void {
+  if (pathogens.length === 0 && creatures.length === 0) return
+
+  if (settings) {
+    maybeIntroduceChampionPathogen(pathogens, creatures, settings, rng, tick)
+  }
+
   if (pathogens.length === 0) return
 
   maybeEnvironmentalSpark(creatures, pathogens, rng, tick)
@@ -72,6 +83,35 @@ export function tickDiseaseSystem(
   applyInfectionHarm(creatures, pathogens)
   tickRecoveries(creatures, pathogens, rng)
   driftEndemicStrains(pathogens, rng, tick)
+}
+
+/** Weighted pick from the hall — slight mutation so reintroduced strains can evolve again. */
+function maybeIntroduceChampionPathogen(
+  pathogens: Pathogen[],
+  creatures: Creature[],
+  settings: SimSettings,
+  rng: Rng,
+  tick: number,
+): void {
+  if (creatures.length < 6) return
+  if (tick < PATHOGEN_CHAMPION_CHECK_INTERVAL) return
+  if (tick % PATHOGEN_CHAMPION_CHECK_INTERVAL !== 0) return
+  if (settings.pathogenChampionSpawnChance <= 0) return
+  if (!rng.chance(settings.pathogenChampionSpawnChance)) return
+  if (pathogens.length >= MAX_PATHOGEN_STRAINS) return
+
+  const championDna = pickPathogenChampionDna(rng)
+  if (!championDna) return
+
+  const strain = createPathogenFromChampionDna(championDna, rng, { mutate: true })
+  pathogens.push(strain)
+
+  if (rng.chance(0.55)) {
+    const target = creatures[rng.int(0, creatures.length - 1)]
+    if (target && !target.infection) {
+      infectCreature(target, strain, rng)
+    }
+  }
 }
 
 function maybeEnvironmentalSpark(

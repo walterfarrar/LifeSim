@@ -5,6 +5,7 @@ import {
   INITIAL_HERBIVORES,
   INITIAL_PLANTS,
   MAX_PLANTS,
+  PATHOGEN_CHAMPION_SPAWN_CHANCE,
   PLANT_LOW_COUNT_BOOST,
   PLANT_SPAWN_CHANCE,
   PLANT_WIND_SPAWN_CHANCE,
@@ -29,6 +30,12 @@ export type SimSettings = {
   respawnBestPlantSpecies: boolean
   /** Saved plant genome id; empty = use auto plant champion. */
   plantFounderId: string
+  /** Include the saved best pathogen in the pool at reset. */
+  respawnBestPathogen: boolean
+  /** Chance per check to reintroduce a hall pathogen mid-run (0–1). */
+  pathogenChampionSpawnChance: number
+  /** Saved pathogen genome id; empty = use auto pathogen champion. */
+  pathogenFounderId: string
 }
 
 export type FounderSettings = Pick<
@@ -50,6 +57,9 @@ export const DEFAULT_SIM_SETTINGS: SimSettings = {
   groupFounders: Array.from({ length: MAX_CREATURE_GROUPS }, () => ''),
   respawnBestPlantSpecies: true,
   plantFounderId: '',
+  respawnBestPathogen: true,
+  pathogenChampionSpawnChance: PATHOGEN_CHAMPION_SPAWN_CHANCE,
+  pathogenFounderId: '',
 }
 
 export function totalStartingHerbivores(settings: SimSettings): number {

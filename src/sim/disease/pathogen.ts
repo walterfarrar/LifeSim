@@ -55,6 +55,20 @@ export function createPathogenFromDna(dna: DNA, generation = 0): Pathogen {
   }
 }
 
+/** Reintroduce a saved champion — optionally mutate so it is not a perfect clone mid-run. */
+export function createPathogenFromChampionDna(
+  dna: DNA,
+  rng: Rng,
+  options: { mutate?: boolean; generation?: number } = {},
+): Pathogen {
+  const generation = options.generation ?? 0
+  if (options.mutate) {
+    const base = createPathogenFromDna(dna, generation)
+    return mutatePathogenOnSpread(base, rng)
+  }
+  return createPathogenFromDna(dna, generation)
+}
+
 export function createRandomPathogen(rng: Rng): Pathogen {
   const dna = createRandomDNA(rng, PATHOGEN_GENE_COUNT)
   dna[PathogenGene.Virulence] = rng.int(40, 200)

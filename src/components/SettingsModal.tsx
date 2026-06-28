@@ -228,6 +228,38 @@ export function SettingsModal({
           </details>
 
           <details open className="settings-group">
+            <summary>Disease</summary>
+            <div className="settings-fields">
+              <label className="settings-field settings-field-checkbox">
+                <span className="settings-label">Respawn best pathogen at reset</span>
+                <span className="settings-hint">
+                  {autoPathogenChampion
+                    ? `Slot 1 of 3 starting strains uses "${autoPathogenChampion.genome.name}"`
+                    : 'No disease champion saved yet — hall strains can reappear once crowned'}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={draft.respawnBestPathogen}
+                  onChange={(event) =>
+                    onChange(patch(draft, { respawnBestPathogen: event.target.checked }))
+                  }
+                />
+              </label>
+              <NumberField
+                label="Hall strain return chance"
+                hint="Per ~2 min check while creatures live (%)"
+                value={Math.round(draft.pathogenChampionSpawnChance * 1000) / 10}
+                min={0}
+                max={50}
+                step={0.5}
+                onChange={(pct) =>
+                  onChange(patch(draft, { pathogenChampionSpawnChance: pct / 100 }))
+                }
+              />
+            </div>
+          </details>
+
+          <details open className="settings-group">
             <summary>Saved champions</summary>
             <div className="settings-fields settings-fields-wide">
               {library.length === 0 ? (

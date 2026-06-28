@@ -5,12 +5,14 @@ import {
 import { createMultiGroupPopulation } from './dna'
 import {
   createInitialPathogens,
+  createPathogenFromChampionDna,
   resetPathogenIds,
   type Pathogen,
 } from './disease/pathogen'
 import { tickDiseaseSystem } from './disease/diseaseSystem'
 import { resolveGroupFounderDnas } from './founderGenomes'
 import { resolvePlantChampionDna } from './plantFounderGenomes'
+import { resolvePathogenChampionDna } from './pathogenFounderGenomes'
 import {
   DEFAULT_SIM_SETTINGS,
   type SimSettings,
@@ -118,6 +120,12 @@ export class World {
     this.corpses = []
     this.creatures = []
     this.pathogens = createInitialPathogens(this.rng, 3)
+    const championPathogenDna = resolvePathogenChampionDna(this.settings)
+    if (championPathogenDna && this.pathogens.length > 0) {
+      this.pathogens[0] = createPathogenFromChampionDna(championPathogenDna, this.rng, {
+        mutate: false,
+      })
+    }
     this.stats = {
       tick: 0,
       plantCount: 0,
@@ -178,7 +186,7 @@ export class World {
 
     this.spawnPlants()
     this.runCreatureBehavior()
-    tickDiseaseSystem(this.creatures, this.pathogens, this.rng, this.stats.tick)
+    tickDiseaseSystem(this.creatures, this.pathogens, this.rng, this.stats.tick, this.settings)
     this.cullDead()
     this.refreshStats()
   }
