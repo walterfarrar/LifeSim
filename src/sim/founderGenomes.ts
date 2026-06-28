@@ -1,4 +1,5 @@
 import { HERBIVORE_GENE_COUNT } from './genes'
+import { normalizeHerbivoreGenes } from './genomeNormalize'
 import { savedGenomeToDna, loadSavedGenomeLibrary, type SavedGenome } from './dnaExport'
 import {
   AUTO_CHAMPION_GENOME_ID,
@@ -36,9 +37,9 @@ export function resolveGroupFounderDnas(
     const id = groupFounderIds[index]?.trim()
     if (!id) return null
     const saved = getFounderGenomeById(id)
-    if (!saved || saved.genes.length !== HERBIVORE_GENE_COUNT) return null
+    if (!saved || saved.genes.length === 0 || saved.genes.length > HERBIVORE_GENE_COUNT) return null
     try {
-      return savedGenomeToDna(saved)
+      return savedGenomeToDna({ ...saved, genes: normalizeHerbivoreGenes(saved.genes) })
     } catch {
       return null
     }

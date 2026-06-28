@@ -55,6 +55,8 @@ export function alignMatePreferencesToBody(
   dna[HerbivoreGene.PreferredSpeed] = clampByte(dna[HerbivoreGene.Speed] + jitter())
   dna[HerbivoreGene.GeneticAssortment] = clampByte(210 + rng.int(-18, 18))
   dna[HerbivoreGene.MateSelectivity] = clampByte(65 + rng.int(-28, 28))
+  dna[HerbivoreGene.CourtshipEagerness] = clampByte(115 + rng.int(-35, 35))
+  dna[HerbivoreGene.CloseMateLeniency] = clampByte(110 + rng.int(-40, 40))
   dna[HerbivoreGene.MutationRate] = clampByte(35 + rng.int(-12, 12))
   dna[HerbivoreGene.MutationAmount] = clampByte(45 + rng.int(-12, 12))
 }

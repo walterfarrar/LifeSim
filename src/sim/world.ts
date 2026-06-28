@@ -328,18 +328,6 @@ export class World {
       }
     }
 
-    for (const creature of this.creatures) {
-      applyMetabolism(creature)
-    }
-
-    for (const creature of this.creatures) {
-      const child = tickPregnancy(creature, this.rng)
-      if (child) {
-        newborns.push(child)
-        this.stats.births += 1
-      }
-    }
-
     for (let i = 0; i < this.creatures.length; i++) {
       for (let j = i + 1; j < this.creatures.length; j++) {
         const a = this.creatures[i]
@@ -359,6 +347,18 @@ export class World {
           paired.add(a.id)
           paired.add(b.id)
         }
+      }
+    }
+
+    for (const creature of this.creatures) {
+      applyMetabolism(creature)
+    }
+
+    for (const creature of this.creatures) {
+      const child = tickPregnancy(creature, this.rng)
+      if (child) {
+        newborns.push(child)
+        this.stats.births += 1
       }
     }
 

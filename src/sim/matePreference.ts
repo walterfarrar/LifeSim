@@ -63,12 +63,21 @@ export function mateAttractionScore(
 }
 
 export function mutuallyAcceptMate(a: Creature, b: Creature, distance: number, maxRange: number): boolean {
+  const traitsA = creatureTraits(a)
+  const traitsB = creatureTraits(b)
+  const thresholdA = mateAcceptanceThreshold(a)
+  const thresholdB = mateAcceptanceThreshold(b)
   const scoreAToB = mateAttractionScore(a, b, distance, maxRange)
   const scoreBToA = mateAttractionScore(b, a, distance, maxRange)
-  return (
-    scoreAToB >= mateAcceptanceThreshold(a) &&
-    scoreBToA >= mateAcceptanceThreshold(b)
-  )
+
+  if (distance <= maxRange) {
+    return (
+      scoreAToB >= thresholdA * traitsA.closeMateLeniency &&
+      scoreBToA >= thresholdB * traitsB.closeMateLeniency
+    )
+  }
+
+  return scoreAToB >= thresholdA && scoreBToA >= thresholdB
 }
 
 export function isMateEligible(seeker: Creature, target: Creature): boolean {

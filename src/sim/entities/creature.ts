@@ -183,12 +183,13 @@ export function mateEnergyMinimum(creature: Creature): number {
   return traits.reproThreshold * (1 - traits.mateLibidoFactor)
 }
 
-/** Energy needed to enter horny mode — lower than full satiety so mating happens while foraging. */
+/** Energy needed to enter horny mode — gene-driven fraction between hungry and sated. */
 export function reproduceModeThreshold(creature: Creature): number {
+  const traits = creatureTraits(creature)
   const enter = hungryEnterLine(creature)
   const exit = hungryExitLine(creature)
   const mateMin = mateEnergyMinimum(creature)
-  return Math.max(mateMin, enter + (exit - enter) * 0.38)
+  return Math.max(mateMin, enter + (exit - enter) * traits.courtshipEagerness)
 }
 
 export function canSeekMate(creature: Creature): boolean {
@@ -201,10 +202,11 @@ export function isPregnant(creature: Creature): boolean {
   return creature.pregnancyTicksRemaining > 0
 }
 
+/** Max center-to-center distance for mating (gene range plus both body radii). */
 export function mateProximity(a: Creature, b: Creature): number {
   const traitsA = creatureTraits(a)
   const traitsB = creatureTraits(b)
-  return Math.max(traitsA.mateRange, traitsB.mateRange)
+  return Math.max(traitsA.mateRange, traitsB.mateRange) + traitsA.radius + traitsB.radius
 }
 
 /** Pair a male and female; the female carries the pregnancy until gestation ends. */

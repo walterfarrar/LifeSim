@@ -1,5 +1,6 @@
 import { HERBIVORE_GENE_COUNT } from './genes'
 import { cloneDNA, type DNA } from './dna'
+import { normalizeHerbivoreGenes } from './genomeNormalize'
 import type { Creature } from './types'
 
 export type SavedGenome = {
@@ -21,9 +22,10 @@ export function dnaToGeneArray(dna: DNA): number[] {
 }
 
 export function geneArrayToDna(genes: number[]): DNA {
-  const dna = new Uint8Array(genes.length)
-  for (let i = 0; i < genes.length; i++) {
-    dna[i] = Math.max(0, Math.min(255, Math.round(genes[i])))
+  const normalized = normalizeHerbivoreGenes(genes)
+  const dna = new Uint8Array(normalized.length)
+  for (let i = 0; i < normalized.length; i++) {
+    dna[i] = normalized[i]
   }
   return dna
 }
@@ -43,8 +45,8 @@ export function creatureToSavedGenome(creature: Creature, name?: string): SavedG
 }
 
 export function savedGenomeToDna(saved: SavedGenome): DNA {
-  if (saved.genes.length !== HERBIVORE_GENE_COUNT) {
-    throw new Error(`Expected ${HERBIVORE_GENE_COUNT} genes, got ${saved.genes.length}`)
+  if (saved.genes.length === 0 || saved.genes.length > HERBIVORE_GENE_COUNT) {
+    throw new Error(`Expected 1–${HERBIVORE_GENE_COUNT} genes, got ${saved.genes.length}`)
   }
   return cloneDNA(geneArrayToDna(saved.genes))
 }

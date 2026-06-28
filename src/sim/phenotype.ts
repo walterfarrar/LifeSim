@@ -86,6 +86,8 @@ export function expressHerbivore(dna: DNA): HerbivoreTraits {
     diseaseRecovery: g(HerbivoreGene.DiseaseRecovery),
     inbreedingTolerance: g(HerbivoreGene.InbreedingTolerance),
     contagion: g(HerbivoreGene.Contagion),
+    courtshipEagerness: 0.12 + g(HerbivoreGene.CourtshipEagerness) * 0.58,
+    closeMateLeniency: 0.15 + g(HerbivoreGene.CloseMateLeniency) * 0.7,
   }
 }
 

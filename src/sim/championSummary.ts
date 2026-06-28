@@ -179,6 +179,24 @@ function collectInsights(traits: HerbivoreTraits, dna: DNA): Insight[] {
     })
   }
 
+  const courtship = highIsBetter(traits.courtshipEagerness, 0.42, 0.2)
+  if (courtship > 0.45) {
+    insights.push({
+      score: courtship,
+      highlight: 'Eager to court',
+      clause: 'enters horny mode before fully sated, spending more time seeking mates',
+    })
+  }
+
+  const closeLeniency = highIsBetter(traits.closeMateLeniency, 0.5, 0.25)
+  if (closeLeniency > 0.45) {
+    insights.push({
+      score: closeLeniency,
+      highlight: 'Commits when close',
+      clause: 'accepts a partner more readily once physically in mate range',
+    })
+  }
+
   const offspringGift = lowIsBetter(traits.offspringGift, 0.18, 0.32)
   if (offspringGift > 0.45) {
     insights.push({

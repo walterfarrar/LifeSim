@@ -1,5 +1,5 @@
 /** Herbivore genome layout — add species-specific gene maps later. */
-export const HERBIVORE_GENE_COUNT = 50
+export const HERBIVORE_GENE_COUNT = 52
 
 export const HerbivoreGene = {
   Speed: 0,
@@ -52,7 +52,15 @@ export const HerbivoreGene = {
   DiseaseRecovery: 47,
   InbreedingTolerance: 48,
   Contagion: 49,
+  /** How soon after leaving “hungry” the creature enters horny mode (0 = at hungry line, 1 = at full satiety). */
+  CourtshipEagerness: 50,
+  /** Willingness multiplier on mate pickiness when already within physical mate reach. */
+  CloseMateLeniency: 51,
 } as const
+
+/** Mid gene values ≈ former hardcoded sim defaults (0.38 courtship, 0.45 close leniency). */
+export const DEFAULT_COURTSHIP_EAGERNESS_GENE = 115
+export const DEFAULT_CLOSE_MATE_LENIENCY_GENE = 110
 
 export type HerbivoreGeneIndex = (typeof HerbivoreGene)[keyof typeof HerbivoreGene]
 
@@ -156,4 +164,6 @@ export type HerbivoreTraits = {
   diseaseRecovery: number
   inbreedingTolerance: number
   contagion: number
+  courtshipEagerness: number
+  closeMateLeniency: number
 }

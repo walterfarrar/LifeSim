@@ -51,4 +51,6 @@ export const HERBIVORE_GENE_LABELS: Record<number, string> = {
   [HerbivoreGene.DiseaseRecovery]: 'Disease recovery',
   [HerbivoreGene.InbreedingTolerance]: 'Inbreeding tolerance',
   [HerbivoreGene.Contagion]: 'Contagion',
+  [HerbivoreGene.CourtshipEagerness]: 'Courtship eagerness',
+  [HerbivoreGene.CloseMateLeniency]: 'Close mate leniency',
 }
