@@ -557,6 +557,35 @@ button:hover {
   cursor: not-allowed;
 }
 
+.speed-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid #1c2a21;
+  border-radius: 8px;
+  background: #121a15;
+}
+
+.speed-value {
+  min-width: 2.75rem;
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #a5bba9;
+}
+
+.speed-button {
+  padding: 0.45rem 0.55rem;
+  font-size: 0.82rem;
+}
+
+.speed-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .stats-inline-link {
   padding: 0;
   border: none;
@@ -970,6 +999,11 @@ button:hover {
   .controls button {
     padding: 0.45rem 0.65rem;
     font-size: 0.85rem;
+  }
+
+  .speed-controls {
+    width: 100%;
+    justify-content: center;
   }
 
   .stats-hint {

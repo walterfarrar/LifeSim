@@ -32,10 +32,12 @@ import {
   settingsRunKey,
 } from './sim/simSettings'
 import type { WorldSnapshot } from './sim/types'
+import { clampSpeedMultiplier } from './sim/timeScale'
 import './App.css'
 
 function App() {
   const [paused, setPaused] = useState(false)
+  const [speedMultiplier, setSpeedMultiplier] = useState(1)
   const [seed, setSeed] = useState(() => Date.now())
   const [runId, setRunId] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -202,7 +204,10 @@ function App() {
           autoPathogenChampion={autoPathogenChampion}
           hasChampionHall={hasChampionHall}
           pendingSettingsChanges={pendingSettingsChanges}
+          speedMultiplier={speedMultiplier}
           onTogglePause={() => setPaused((value) => !value)}
+          onSlower={() => setSpeedMultiplier((value) => clampSpeedMultiplier(value / 2))}
+          onFaster={() => setSpeedMultiplier((value) => clampSpeedMultiplier(value * 2))}
           onRestart={() => handleStart(false)}
           onReseed={() => handleStart(true)}
           onOpenSettings={() => setSettingsOpen(true)}
@@ -216,6 +221,7 @@ function App() {
       <SimulationCanvas
         key={canvasKey}
         paused={paused}
+        speedMultiplier={speedMultiplier}
         seed={seed}
         settings={activeSettings}
         selectedId={selectedId}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { TICKS_PER_SECOND } from '../sim/config'
+import { MIN_SPEED_MULTIPLIER } from '../sim/timeScale'
 import { corpseRadius, drawCorpseBody } from '../sim/entities/corpse'
 import { plantRadius } from '../sim/entities/plant'
 import { drawPlantBody } from '../sim/render/plantDraw'
@@ -18,6 +19,7 @@ import { VisualLegend } from './VisualLegend'
 
 type SimulationCanvasProps = {
   paused: boolean
+  speedMultiplier: number
   seed: number
   settings: SimSettings
   selectedId: number | null
@@ -27,6 +29,7 @@ type SimulationCanvasProps = {
 
 export function SimulationCanvas({
   paused,
+  speedMultiplier,
   seed,
   settings,
   selectedId,
@@ -36,9 +39,11 @@ export function SimulationCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<World | null>(null)
   const pausedRef = useRef(paused)
+  const speedRef = useRef(speedMultiplier)
   const [, setReady] = useState(false)
 
   pausedRef.current = paused
+  speedRef.current = speedMultiplier
 
   useEffect(() => {
     worldRef.current = new World(seed, settings)
@@ -61,7 +66,6 @@ export function SimulationCanvas({
     let lastTime = performance.now()
     let tickDebt = 0
     let lastReportedTick = -1
-    const tickInterval = 1000 / TICKS_PER_SECOND
 
     const render = (time: number) => {
       const delta = time - lastTime
@@ -69,7 +73,9 @@ export function SimulationCanvas({
 
       if (!pausedRef.current) {
         tickDebt += delta
-        const maxTicksPerFrame = 10
+        const speed = Math.max(speedRef.current, MIN_SPEED_MULTIPLIER)
+        const tickInterval = 1000 / (TICKS_PER_SECOND * speed)
+        const maxTicksPerFrame = Math.min(50, Math.max(10, Math.ceil(speed * 10)))
         let ticksThisFrame = 0
         while (tickDebt >= tickInterval && ticksThisFrame < maxTicksPerFrame) {
           world.tick()

@@ -1,5 +1,5 @@
 import type { WorldStats } from '../sim/types'
-import { formatYears } from '../sim/timeScale'
+import { formatYears, formatSpeedMultiplier, MAX_SPEED_MULTIPLIER, MIN_SPEED_MULTIPLIER } from '../sim/timeScale'
 import type { AutoChampionRecord } from '../sim/autoChampion'
 import type { AutoPlantChampionRecord } from '../sim/plantAutoChampion'
 import type { AutoPathogenChampionRecord } from '../sim/pathogenAutoChampion'
@@ -16,7 +16,10 @@ type StatsPanelProps = {
   autoPathogenChampion: AutoPathogenChampionRecord | null
   hasChampionHall: boolean
   pendingSettingsChanges: boolean
+  speedMultiplier: number
   onTogglePause: () => void
+  onSlower: () => void
+  onFaster: () => void
   onRestart: () => void
   onReseed: () => void
   onOpenSettings: () => void
@@ -33,7 +36,10 @@ export function StatsPanel({
   autoPathogenChampion,
   hasChampionHall,
   pendingSettingsChanges,
+  speedMultiplier,
   onTogglePause,
+  onSlower,
+  onFaster,
   onRestart,
   onReseed,
   onOpenSettings,
@@ -114,6 +120,31 @@ export function StatsPanel({
         <button type="button" onClick={onReseed}>
           New seed
         </button>
+        <div className="speed-controls" aria-label="Simulation speed">
+          <button
+            type="button"
+            className="speed-button"
+            onClick={onSlower}
+            disabled={speedMultiplier <= MIN_SPEED_MULTIPLIER}
+            title="Halve simulation speed"
+            aria-label="Halve simulation speed"
+          >
+            Slower
+          </button>
+          <span className="speed-value" title="Simulation speed multiplier">
+            {formatSpeedMultiplier(speedMultiplier)}
+          </span>
+          <button
+            type="button"
+            className="speed-button"
+            onClick={onFaster}
+            disabled={speedMultiplier >= MAX_SPEED_MULTIPLIER}
+            title="Double simulation speed"
+            aria-label="Double simulation speed"
+          >
+            Faster
+          </button>
+        </div>
         <button
           type="button"
           className="champion-button"
