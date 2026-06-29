@@ -1,12 +1,12 @@
 /** World and simulation tuning — adjust here as the sim grows. */
-export const WORLD_WIDTH = 1200
-export const WORLD_HEIGHT = 800
+export const WORLD_WIDTH = 2200
+export const WORLD_HEIGHT = 1500
 
 export const TICKS_PER_SECOND = 30
 
-export const INITIAL_PLANTS = 300
+export const INITIAL_PLANTS = 500
 export const INITIAL_HERBIVORES = 40
-export const MAX_PLANTS = 500
+export const MAX_PLANTS = 900
 export const PLANT_SPAWN_CHANCE = 0.035
 /** Chance per tick to seed a random plant when the map is completely bare. */
 export const PLANT_WIND_SPAWN_CHANCE = 0.12

@@ -14,11 +14,11 @@ export const PLANT_BUDGET_GENES: readonly PlantGeneIndex[] = [
   PlantGene.Hardiness,
 ] as const
 
-/** Sum of all budget-gene values (8 genes × 127 ≈ former independent midpoints). */
-export const PLANT_BUDGET_TOTAL = PLANT_BUDGET_GENES.length * 127
+/** Sum of all budget-gene values (8 genes × 160 — bumped from 127 for stronger plants). */
+export const PLANT_BUDGET_TOTAL = PLANT_BUDGET_GENES.length * 160
 
 export const PLANT_BUDGET_MIN = 20
-export const PLANT_BUDGET_MAX = 200
+export const PLANT_BUDGET_MAX = 220
 
 const BUDGET_GENE_SET = new Set<number>(PLANT_BUDGET_GENES)
 

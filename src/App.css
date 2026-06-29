@@ -43,6 +43,8 @@ button:hover {
   display: grid;
   grid-template-columns: 320px 1fr;
   min-height: 100vh;
+  min-height: 100dvh;
+  height: 100dvh;
 }
 
 .sidebar {
@@ -469,7 +471,54 @@ button:hover {
 
 .canvas-wrap {
   position: relative;
-  min-height: 100vh;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas-viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: #0a0e0b;
+  cursor: grab;
+  touch-action: none;
+}
+
+.canvas-viewport:active {
+  cursor: grabbing;
+}
+
+.zoom-controls {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 10px;
+  background: rgba(16, 22, 18, 0.92);
+  border: 1px solid #243328;
+}
+
+.zoom-controls button {
+  min-width: 2rem;
+  padding: 0.25rem 0.45rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.zoom-value {
+  min-width: 3rem;
+  text-align: center;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: #9cb8a4;
 }
 
 .paused-badge {
@@ -491,10 +540,8 @@ button:hover {
 }
 
 .sim-canvas {
+  position: absolute;
   display: block;
-  width: 100%;
-  height: 100vh;
-  object-fit: contain;
   background: #0f1410;
   cursor: crosshair;
 }
@@ -978,8 +1025,30 @@ button:hover {
     width: 100%;
     min-height: 0;
     max-height: none;
-    aspect-ratio: 3 / 2;
-    height: min(calc(100vw * 2 / 3), calc(100dvh - 11.5rem));
+    aspect-ratio: 22 / 15;
+    height: min(calc(100vw * 15 / 22), calc(100dvh - 11.5rem));
+  }
+
+  .canvas-viewport {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .zoom-controls {
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 0.25rem 0.35rem;
+  }
+
+  .zoom-controls button {
+    min-width: 1.75rem;
+    padding: 0.2rem 0.35rem;
+    font-size: 0.9rem;
+  }
+
+  .zoom-value {
+    min-width: 2.5rem;
+    font-size: 0.72rem;
   }
 
   .sidebar {
@@ -1048,11 +1117,6 @@ button:hover {
 
   .creature-inspector {
     padding: 0 1rem 1rem;
-  }
-
-  .sim-canvas {
-    height: 100%;
-    width: 100%;
   }
 
   .visual-legend {
