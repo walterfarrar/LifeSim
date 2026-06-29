@@ -21,7 +21,7 @@ function plantMargin(bounds = getWorldBounds()): number {
 }
 
 function startingEnergy(rng: Rng, maxEnergy: number): number {
-  return rng.range(8, maxEnergy * 0.6)
+  return rng.range(5, maxEnergy * 0.38)
 }
 
 export function createPlant(
@@ -71,12 +71,22 @@ export function plantSpreadRange(parent: Plant): { min: number; max: number } {
   const traits = plantTraits(parent)
   const maturity = Math.min(1, parent.age / traits.maturationAge)
   const energyRatio = Math.min(1, parent.energy / traits.maxEnergy)
-  const reach = maturity * 0.75 + energyRatio * 0.25
+  const reach = maturity * 0.7 + energyRatio * 0.3
+  const spreadScale = 0.45 + reach * 0.55
 
   return {
-    min: traits.spreadMin + reach * 25,
-    max: traits.spreadMax + reach * traits.spreadAgeBonus,
+    min: traits.spreadMin * spreadScale + reach * 30,
+    max: traits.spreadMax * spreadScale + reach * traits.spreadAgeBonus,
   }
+}
+
+/** Per-tick chance a mature parent produces a seedling (independent of global spawn roll). */
+export function plantReproductionChance(parent: Plant): number {
+  const traits = plantTraits(parent)
+  const maturity = Math.min(1, parent.age / traits.maturationAge)
+  const energyRatio = Math.min(1, parent.energy / traits.maxEnergy)
+  const readiness = 0.12 + maturity * 0.48 + energyRatio * 0.4
+  return Math.min(1, readiness * traits.reproductionRate)
 }
 
 /** Spawn a new plant within spread distance of an existing one. */

@@ -13,13 +13,26 @@ export const WORLD_HEIGHT = DEFAULT_WORLD_HEIGHT
 
 export const TICKS_PER_SECOND = 30
 
-export const INITIAL_PLANTS = 500
+export const INITIAL_PLANTS = 650
 export const INITIAL_HERBIVORES = 40
-export const MAX_PLANTS = 900
-export const PLANT_SPAWN_CHANCE = 0.035
+export const MAX_PLANTS = 1600
+export const PLANT_SPAWN_CHANCE = 0.055
 /** Chance per tick to seed a random plant when the map is completely bare. */
-export const PLANT_WIND_SPAWN_CHANCE = 0.12
-export const PLANT_LOW_COUNT_BOOST = 30
+export const PLANT_WIND_SPAWN_CHANCE = 0.18
+export const PLANT_LOW_COUNT_BOOST = 45
+
+const REFERENCE_WORLD_AREA = DEFAULT_WORLD_WIDTH * DEFAULT_WORLD_HEIGHT
+
+/** Scale plant population caps with map area (reference = default 2200×1500). */
+export function scaledMaxPlants(width: number, height: number): number {
+  const scale = (width * height) / REFERENCE_WORLD_AREA
+  return Math.round(Math.min(5000, Math.max(MAX_PLANTS, MAX_PLANTS * scale)))
+}
+
+export function scaledInitialPlants(width: number, height: number): number {
+  const scale = (width * height) / REFERENCE_WORLD_AREA
+  return Math.round(Math.min(2500, Math.max(INITIAL_PLANTS, INITIAL_PLANTS * scale)))
+}
 
 /** Fraction of birth mutations that are large jumps (most are small nudges). */
 export const LARGE_MUTATION_CHANCE = 0.0025

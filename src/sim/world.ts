@@ -50,6 +50,7 @@ import {
   createPlantWithDna,
   growPlant,
   isPlantEdible,
+  plantReproductionChance,
   plantTraits,
   resetPlantIds,
 } from './entities/plant'
@@ -235,26 +236,33 @@ export class World {
       return
     }
 
-    const spawnChance =
+    const tickChance =
       this.plants.length < plantLowCountBoost
         ? plantSpawnChance * 2.5
         : plantSpawnChance
-    if (!this.rng.chance(spawnChance)) return
+    const attempts = Math.max(
+      1,
+      Math.min(10, Math.round(Math.sqrt(this.plants.length) / 5)),
+    )
 
-    const parentIndex = this.rng.int(0, this.plants.length - 1)
-    const parent = this.plants[parentIndex]
-    if (!parent) return
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      if (this.plants.length >= maxPlants) return
+      if (!this.rng.chance(tickChance)) continue
 
-    const parentTraits = plantTraits(parent)
-    const reproductionChance = Math.min(1, spawnChance * parentTraits.reproductionRate)
-    if (!this.rng.chance(reproductionChance)) return
+      const parentIndex = this.rng.int(0, this.plants.length - 1)
+      const parent = this.plants[parentIndex]
+      if (!parent) continue
 
-    const seedCost = Math.min(parent.energy * 0.22, parentTraits.maxEnergy * 0.14)
-    if (parent.energy < seedCost + 0.5) return
-    parent.energy -= seedCost
+      if (!this.rng.chance(plantReproductionChance(parent))) continue
 
-    const child = createPlantNear(this.rng, parent, seedCost * 0.92)
-    this.plants.push(child)
+      const parentTraits = plantTraits(parent)
+      const seedCost = Math.min(parent.energy * 0.14, parentTraits.maxEnergy * 0.09)
+      if (parent.energy < seedCost + 0.25) continue
+
+      parent.energy -= seedCost
+      const child = createPlantNear(this.rng, parent, seedCost * 0.95)
+      this.plants.push(child)
+    }
   }
 
   private runCreatureBehavior(): void {
