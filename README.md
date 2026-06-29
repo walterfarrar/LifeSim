@@ -11,9 +11,13 @@ npm run dev
 
 ## Live demo
 
+**Auto-updates on every push (use this on your phone):**  
 https://walterfarrar.github.io/LifeSim/
 
-Pushes to `master` deploy automatically via GitHub Actions.
+**Netlify mirror (same app, deploys when pushed to `master` via GitHub Actions):**  
+https://lifesim-walterfarrar.netlify.app/
+
+Pushes to `master` deploy to GitHub Pages automatically. If the site looks stale on your phone, hard-refresh or clear the browser cache — bookmark the GitHub Pages URL above.
 
 ## Architecture
 
