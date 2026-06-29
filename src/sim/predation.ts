@@ -1,11 +1,9 @@
 import {
-  canSeekMate,
   creatureTraits,
-  mateProximity,
   toroidalDelta,
   toroidalDistance,
 } from './entities/creature'
-import { dnaSimilarity, mutuallyAcceptMate } from './matePreference'
+import { dnaSimilarity, isMatingCourtship } from './matePreference'
 import type { Rng } from './rng'
 import type { Corpse, Creature } from './types'
 import type { DNA } from './dna'
@@ -27,22 +25,10 @@ export function predateCorpseChance(hunter: Creature, corpse: Corpse): number {
   return predateChanceFromDna(hunter, corpse.dna)
 }
 
-function isMateCourtship(a: Creature, b: Creature): boolean {
-  if (a.mode !== 'horny' || b.mode !== 'horny') return false
-  if (a.sex === b.sex) return false
-  if (!canSeekMate(a) && !canSeekMate(b)) return false
-
-  const dist = toroidalDistance(a, b)
-  const range = mateProximity(a, b)
-  if (dist > range) return false
-
-  return mutuallyAcceptMate(a, b, dist, range)
-}
-
 export function isValidPrey(hunter: Creature, prey: Creature): boolean {
   if (prey.id === hunter.id) return false
   if (prey.energy <= 0) return false
-  if (isMateCourtship(hunter, prey)) return false
+  if (isMatingCourtship(hunter, prey)) return false
   return predateChance(hunter, prey) > 0
 }
 

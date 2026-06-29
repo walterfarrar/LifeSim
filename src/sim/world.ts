@@ -57,10 +57,10 @@ import {
   resetPlantIds,
 } from './entities/plant'
 import {
-  isMateEligible,
+  isMateSearchTarget,
   mateAcceptanceThreshold,
   mateAttractionScore,
-  mutuallyAcceptMate,
+  willMate,
 } from './matePreference'
 import { applySpaceReaction, evaluateSpaceReaction } from './spaceBehavior'
 import { findCohesionTarget } from './cohesion'
@@ -359,15 +359,15 @@ export class World {
         const b = this.creatures[j]
         if (paired.has(a.id) || paired.has(b.id)) continue
         if (a.sex === b.sex) continue
-        if (a.mode !== 'horny' || b.mode !== 'horny') continue
-        if (!canSeekMate(a) || !canSeekMate(b)) continue
-        if (toroidalDistance(a, b) > mateProximity(a, b)) continue
-        const mateDist = toroidalDistance(a, b)
-        const mateRange = mateProximity(a, b)
-        if (!mutuallyAcceptMate(a, b, mateDist, mateRange)) continue
-
         const male = a.sex === 'male' ? a : b
         const female = a.sex === 'female' ? a : b
+        if (male.sex !== 'male' || female.sex !== 'female') continue
+        if (!canSeekMate(male)) continue
+        const mateDist = toroidalDistance(a, b)
+        const mateRange = mateProximity(a, b)
+        if (mateDist > mateRange) continue
+        if (!willMate(male, female, mateDist, mateRange)) continue
+
         if (mate(male, female)) {
           paired.add(a.id)
           paired.add(b.id)
@@ -400,8 +400,7 @@ export class World {
     let bestProspectScore = -1
 
     for (const other of this.creatures) {
-      if (!isMateEligible(creature, other)) continue
-      if (!canSeekMate(other) && other.mode !== 'horny') continue
+      if (!isMateSearchTarget(creature, other)) continue
       const dist = toroidalDistance(creature, other)
       if (dist >= seekRange) continue
 

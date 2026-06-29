@@ -1,14 +1,12 @@
 import {
-  canSeekMate,
   creatureTraits,
   effectiveAggressiveness,
-  mateProximity,
   moveAwayFrom,
   moveToward,
   tryAttackCreature,
   toroidalDistance,
 } from './entities/creature'
-import { mutuallyAcceptMate } from './matePreference'
+import { isMatingCourtship } from './matePreference'
 import type { Creature } from './types'
 
 const ATTACK_AGGRESSION_THRESHOLD = 0.32
@@ -18,23 +16,6 @@ export type SpaceReaction =
   | { kind: 'flee'; intruder: Creature }
   | { kind: 'chase'; intruder: Creature }
   | { kind: 'attack'; intruder: Creature }
-
-/** Horny, willing pairs may enter personal space without fleeing while closing to mate range. */
-function isMatingCourtship(a: Creature, b: Creature): boolean {
-  if (a.mode !== 'horny' || b.mode !== 'horny') return false
-  if (a.sex === b.sex) return false
-  if (!canSeekMate(a) || !canSeekMate(b)) return false
-
-  const traitsA = creatureTraits(a)
-  const traitsB = creatureTraits(b)
-  const dist = toroidalDistance(a, b)
-  const mateRange = mateProximity(a, b)
-  const courtshipRange = Math.max(mateRange, traitsA.vision, traitsB.vision)
-
-  if (dist > courtshipRange) return false
-
-  return mutuallyAcceptMate(a, b, dist, mateRange)
-}
 
 function findClosestIntruder(creature: Creature, others: readonly Creature[]): Creature | null {
   const traits = creatureTraits(creature)
