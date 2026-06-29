@@ -19,6 +19,7 @@ export type TrackedLineage = {
   peakPopulation: number
   lastPopulation: number
   cumulativeScore: number
+  cumulativePopulation: number
   observationCount: number
   cumulativePregnancies: number
   peakPregnant: number
@@ -49,11 +50,12 @@ export class LineageTracker {
 
   bestLineage(): TrackedLineage | null {
     let best: TrackedLineage | null = null
-    let bestFitness = -1
+    let bestFitness = 0
 
     for (const lineage of this.lineages) {
       if (lineage.lastPopulation < MIN_LINEAGE_POPULATION) continue
       const fitness = this.crownFitnessOf(lineage)
+      // fitness is 0 until a lineage has proven it survives (>= MIN_OBSERVATIONS_TO_CROWN).
       if (fitness > bestFitness) {
         bestFitness = fitness
         best = lineage
@@ -63,19 +65,19 @@ export class LineageTracker {
     return best
   }
 
-  /** Fitness for hall crowning — based on current vigor, not lifetime cumulative alone. */
+  /** Fitness for hall crowning — rewards sustained survival, not a momentary population spike. */
   crownFitnessOf(lineage: TrackedLineage): number {
-    return lineageCrownFitness(
-      {
-        instantScore: lineage.lastInstantScore,
-        population: lineage.lastPopulation,
-        matureCount: 0,
-        avgAge: 0,
-      },
-      lineage.peakPopulation,
-      lineage.lastSeenTick - lineage.firstSeenTick,
-      lineage.peakPregnant,
-    )
+    const observationCount = Math.max(1, lineage.observationCount)
+    return lineageCrownFitness({
+      avgInstantScore: lineage.cumulativeScore / observationCount,
+      avgPopulation: lineage.cumulativePopulation / observationCount,
+      lastPopulation: lineage.lastPopulation,
+      peakPopulation: lineage.peakPopulation,
+      spanTicks: lineage.lastSeenTick - lineage.firstSeenTick,
+      observationCount: lineage.observationCount,
+      peakPregnant: lineage.peakPregnant,
+      cumulativePregnancies: lineage.cumulativePregnancies,
+    })
   }
 
   fitnessOf(lineage: TrackedLineage): number {
@@ -109,6 +111,7 @@ export class LineageTracker {
       peakPopulation: cluster.members.length,
       lastPopulation: cluster.members.length,
       cumulativeScore: 0,
+      cumulativePopulation: 0,
       observationCount: 0,
       cumulativePregnancies: 0,
       peakPregnant: 0,
@@ -134,6 +137,7 @@ export class LineageTracker {
     lineage.peakPregnant = Math.max(lineage.peakPregnant, pregnantCount)
     lineage.cumulativePregnancies += pregnantCount
     lineage.cumulativeScore += snapshot.instantScore
+    lineage.cumulativePopulation += snapshot.population
     lineage.observationCount += 1
     lineage.lastInstantScore = snapshot.instantScore
     lineage.centroidGenes = dnaToGeneArray(cluster.centroid)

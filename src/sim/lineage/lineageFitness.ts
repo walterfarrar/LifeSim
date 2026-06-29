@@ -1,3 +1,4 @@
+import { TICKS_PER_SECOND } from '../config'
 import { creatureTraits } from '../entities/creature'
 import type { LineageCluster } from './lineageCluster'
 
@@ -69,15 +70,62 @@ export function lineageFitnessSnapshot(cluster: LineageCluster): LineageFitnessS
   }
 }
 
-/** Score used to crown a new hall entry — snapshot strength, not unbounded cumulative history. */
-export function lineageCrownFitness(
-  snapshot: LineageFitnessSnapshot,
-  peakPopulation: number,
-  spanTicks: number,
-  peakPregnant: number,
-): number {
-  const persistence = spanTicks * (0.08 + snapshot.population * 0.04)
-  const peakBonus = peakPopulation * peakPopulation * 45
-  const fertilityBonus = peakPregnant * peakPregnant * 120
-  return snapshot.instantScore + persistence + peakBonus + fertilityBonus
+export type LineageCrownStats = {
+  /** Mean instant vigor across every observation (cumulativeScore / observationCount). */
+  avgInstantScore: number
+  /** Mean population across every observation — sustained size, not a momentary peak. */
+  avgPopulation: number
+  /** Population at the most recent observation. */
+  lastPopulation: number
+  /** Highest population ever seen for this lineage. */
+  peakPopulation: number
+  /** Ticks between first and last observation — how long the lineage actually lasted. */
+  spanTicks: number
+  /** How many times this lineage has been sampled. */
+  observationCount: number
+  /** Most pregnancies seen at once. */
+  peakPregnant: number
+  /** Total pregnancies counted across all observations. */
+  cumulativePregnancies: number
+}
+
+/**
+ * A lineage must be observed at least this many times before it can be crowned.
+ * One snapshot only proves a momentary spike, never that the species survives.
+ */
+export const MIN_OBSERVATIONS_TO_CROWN = 2
+
+/**
+ * Crown fitness rewards a lineage that *survives the best*: population and vigor sustained
+ * over time, kept self-sustaining by reproduction. A one-frame population spike scores 0,
+ * and a momentary peak is only a minor linear tiebreak (never squared).
+ */
+export function lineageCrownFitness(stats: LineageCrownStats): number {
+  if (stats.observationCount < MIN_OBSERVATIONS_TO_CROWN || stats.spanTicks <= 0) {
+    return 0
+  }
+
+  const survivalMinutes = stats.spanTicks / (TICKS_PER_SECOND * 60)
+
+  // Longevity is the backbone: every surviving minute multiplies sustained strength.
+  const longevityMultiplier = 1 + survivalMinutes
+  const sustainedScore = stats.avgInstantScore * longevityMultiplier
+
+  // Population held *over time*, not a single peak frame.
+  const sustainedPopulationBonus = stats.avgPopulation * survivalMinutes * 60
+
+  // Self-sustaining reproduction across the whole life of the lineage.
+  const reproductionBonus = stats.cumulativePregnancies * 10
+
+  // Still thriving at save time matters; raw peak is only a small linear nudge.
+  const stillAliveBonus = stats.lastPopulation * 40
+  const peakBonus = stats.peakPopulation * 20
+
+  return (
+    sustainedScore +
+    sustainedPopulationBonus +
+    reproductionBonus +
+    stillAliveBonus +
+    peakBonus
+  )
 }
