@@ -51,7 +51,13 @@ export function createHerbivore(rng: Rng, position?: Vec2, dna = createRandomHer
 }
 
 export function creatureTraits(creature: Creature) {
-  return expressCreatureTraits(creature.dna, creature.inbreedingLoad)
+  if (creature.traitsCache !== undefined && creature.traitsCacheLoad === creature.inbreedingLoad) {
+    return creature.traitsCache
+  }
+  const traits = expressCreatureTraits(creature.dna, creature.inbreedingLoad)
+  creature.traitsCache = traits
+  creature.traitsCacheLoad = creature.inbreedingLoad
+  return traits
 }
 
 export function moveAwayFrom(creature: Creature, threat: Vec2, traits = creatureTraits(creature)): void {

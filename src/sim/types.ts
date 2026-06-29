@@ -1,6 +1,6 @@
 import type { DNA } from './dna'
 import type { Infection, Pathogen } from './disease/pathogen'
-import type { CreatureShape } from './genes'
+import type { CreatureShape, HerbivoreTraits } from './genes'
 
 export type Vec2 = { x: number; y: number }
 
@@ -66,6 +66,10 @@ export interface Creature {
   /** 0–1 debuff from similar-parent births; permanent for life. */
   inbreedingLoad: number
   infection?: Infection
+  /** Memoized expressed traits — dna and inbreedingLoad are immutable once alive. */
+  traitsCache?: HerbivoreTraits
+  /** inbreedingLoad the cache was built with; recompute if it changes. */
+  traitsCacheLoad?: number
 }
 
 export type SimEntity = Plant | Creature | Corpse

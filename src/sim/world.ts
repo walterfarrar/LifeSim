@@ -65,6 +65,7 @@ import {
 import { applySpaceReaction, evaluateSpaceReaction } from './spaceBehavior'
 import { findCohesionTarget } from './cohesion'
 import { findBestPlantTarget } from './foraging'
+import { CreatureGrid } from './spatialGrid'
 import {
   attemptPredation,
   findBestCorpseTarget,
@@ -109,6 +110,10 @@ export class World {
     treePlantCount: 0,
   }
   private primaryProductionThisTick = 0
+  /** Broad-phase neighbor index for the current tick. */
+  private grid: CreatureGrid = new CreatureGrid([])
+  /** Edible plants for the current tick — hoisted so we filter once, not per creature. */
+  private ediblePlants: Plant[] = []
 
   constructor(seed?: number, settings: SimSettings = DEFAULT_SIM_SETTINGS) {
     this.settings = { ...settings }
@@ -264,10 +269,14 @@ export class World {
     const newborns: Creature[] = []
     const paired = new Set<number>()
 
+    this.grid = new CreatureGrid(this.creatures)
+    this.ediblePlants = this.plants.filter(isPlantEdible)
+
     for (const creature of this.creatures) {
       updateMode(creature)
       const traits = creatureTraits(creature)
-      const spaceReaction = evaluateSpaceReaction(creature, this.creatures)
+      const spaceNeighbors = this.grid.collect(creature.x, creature.y, traits.personalSpace)
+      const spaceReaction = evaluateSpaceReaction(creature, spaceNeighbors)
       const handledSpace = applySpaceReaction(creature, spaceReaction)
 
       if (!handledSpace) {
@@ -295,7 +304,7 @@ export class World {
       const forageReach = traits.radius + traits.forageReach
       const nearestPlant = findBestPlantTarget(
         traits,
-        this.plants.filter(isPlantEdible),
+        this.ediblePlants,
         (plant) => toroidalDistance(creature, plant),
         forageReach,
         eatenPlantIds,
@@ -341,7 +350,8 @@ export class World {
 
       if (!needsFood(creature)) continue
 
-      for (const prey of this.creatures) {
+      const preyNeighbors = this.grid.collect(creature.x, creature.y, forageReach)
+      for (const prey of preyNeighbors) {
         if (!isValidPrey(creature, prey)) continue
         const biomass = attemptPredation(creature, prey, this.rng)
         if (biomass > 0) {
@@ -352,11 +362,13 @@ export class World {
       }
     }
 
-    for (let i = 0; i < this.creatures.length; i++) {
-      for (let j = i + 1; j < this.creatures.length; j++) {
-        const a = this.creatures[i]
-        const b = this.creatures[j]
-        if (paired.has(a.id) || paired.has(b.id)) continue
+    for (const a of this.creatures) {
+      if (paired.has(a.id)) continue
+      const mateNeighbors = this.grid.collect(a.x, a.y, MAX_MATE_PROXIMITY)
+      for (const b of mateNeighbors) {
+        if (b.id <= a.id) continue
+        if (paired.has(a.id)) break
+        if (paired.has(b.id)) continue
         if (a.sex === b.sex) continue
         const male = a.sex === 'male' ? a : b
         const female = a.sex === 'female' ? a : b
@@ -398,7 +410,8 @@ export class World {
     let prospectTarget: Creature | null = null
     let bestProspectScore = -1
 
-    for (const other of this.creatures) {
+    const candidates = this.grid.collect(creature.x, creature.y, seekRange)
+    for (const other of candidates) {
       if (!isMateSearchTarget(creature, other)) continue
       const dist = toroidalDistance(creature, other)
       if (dist >= seekRange) continue
@@ -442,7 +455,7 @@ export class World {
     const traits = creatureTraits(creature)
     return findBestPlantTarget(
       traits,
-      this.plants.filter(isPlantEdible),
+      this.ediblePlants,
       (plant) => toroidalDistance(creature, plant),
       seekRange,
     )
@@ -460,7 +473,8 @@ export class World {
       }
     }
 
-    const prey = findBestPreyTarget(creature, this.creatures, vision)
+    const preyCandidates = this.grid.collect(creature.x, creature.y, vision)
+    const prey = findBestPreyTarget(creature, preyCandidates, vision)
     if (prey) {
       const preyDist = toroidalDistance(creature, prey)
       if (shouldHuntPreyOverPlant(creature, prey, foodDist, preyDist, vision)) {
@@ -492,7 +506,8 @@ export class World {
       return { x: creature.wanderX, y: creature.wanderY }
     }
 
-    const cohesionTarget = findCohesionTarget(creature, this.creatures)
+    const cohesionNeighbors = this.grid.collect(creature.x, creature.y, traits.vision)
+    const cohesionTarget = findCohesionTarget(creature, cohesionNeighbors)
     const cohesionBias = traits.cohesion
     const useCohesion = cohesionTarget !== null && this.rng.chance(cohesionBias * 0.72 + 0.12)
 
@@ -561,3 +576,9 @@ export class World {
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
+
+/**
+ * Upper bound on mateProximity: max mateRange (8 + 16) plus both max body radii
+ * (3 + 7 each). Used as a safe broad-phase radius for mate pairing.
+ */
+const MAX_MATE_PROXIMITY = 48
