@@ -82,6 +82,14 @@ export function VisualLegend() {
 
   return (
     <div className={`visual-legend${open ? ' open' : ''}`}>
+      {open && (
+        <button
+          type="button"
+          className="legend-backdrop"
+          onClick={() => setOpen(false)}
+          aria-label="Close legend"
+        />
+      )}
       <button
         type="button"
         className="legend-toggle"
@@ -175,6 +183,12 @@ export function VisualLegend() {
           <p className="legend-footnote">
             Space pauses · Click creature to inspect · ⚙ for start settings
           </p>
+
+          <footer className="legend-panel-footer">
+            <button type="button" className="legend-panel-close-full" onClick={() => setOpen(false)}>
+              Close legend
+            </button>
+          </footer>
         </section>
       )}
     </div>

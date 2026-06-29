@@ -816,6 +816,11 @@ button:hover {
   background: rgba(10, 15, 12, 0.94);
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(4px);
+  -webkit-overflow-scrolling: touch;
+}
+
+.legend-backdrop {
+  display: none;
 }
 
 .legend-panel-header {
@@ -824,6 +829,14 @@ button:hover {
   justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.65rem;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(10, 15, 12, 0.98);
+  margin-top: -0.85rem;
+  margin-inline: -0.95rem;
+  padding: 0.85rem 0.95rem 0.65rem;
+  border-bottom: 1px solid #1c2a21;
 }
 
 .legend-panel-header h2 {
@@ -835,6 +848,19 @@ button:hover {
   padding: 0.1rem 0.5rem;
   font-size: 1.2rem;
   line-height: 1;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+}
+
+.legend-panel-footer {
+  display: none;
+}
+
+.legend-panel-close-full {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .legend-section + .legend-section {
@@ -1026,6 +1052,61 @@ button:hover {
   .visual-legend {
     bottom: 0.5rem;
     left: 0.5rem;
+  }
+
+  .visual-legend.open {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    max-width: none;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 0.45rem;
+  }
+
+  .visual-legend.open .legend-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: rgba(4, 8, 6, 0.72);
+    cursor: pointer;
+  }
+
+  .visual-legend.open .legend-toggle,
+  .visual-legend.open .legend-panel {
+    position: relative;
+    z-index: 1;
+  }
+
+  .visual-legend.open .legend-panel {
+    margin-top: 0;
+    max-height: min(78dvh, 640px);
+    padding-bottom: 0.75rem;
+  }
+
+  .visual-legend.open .legend-panel-header {
+    margin-top: 0;
+  }
+
+  .visual-legend.open .legend-panel-close {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    font-size: 1.5rem;
+  }
+
+  .visual-legend.open .legend-panel-footer {
+    display: block;
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: 0.75rem -0.95rem -0.75rem;
+    padding: 0.75rem 0.95rem 0;
+    background: linear-gradient(180deg, rgba(10, 15, 12, 0) 0%, rgba(10, 15, 12, 0.98) 35%);
   }
 
   .legend-toggle {
