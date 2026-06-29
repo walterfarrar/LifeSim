@@ -396,6 +396,8 @@ export class World {
     const threshold = mateAcceptanceThreshold(creature)
     let mateTarget: Creature | null = null
     let bestScore = -1
+    let prospectTarget: Creature | null = null
+    let bestProspectScore = -1
 
     for (const other of this.creatures) {
       if (!isMateEligible(creature, other)) continue
@@ -407,11 +409,18 @@ export class World {
       if (score >= threshold && score > bestScore) {
         bestScore = score
         mateTarget = other
+        continue
+      }
+
+      if (score > bestProspectScore) {
+        bestProspectScore = score
+        prospectTarget = other
       }
     }
 
     if (mateTarget) return mateTarget
-    return this.findFoodGoalWhileExploring(creature, vision) ?? this.pickWanderGoal(creature)
+    if (prospectTarget) return prospectTarget
+    return this.pickWanderGoal(creature)
   }
 
   private findFoodGoalWhileExploring(creature: Creature, vision: number): { x: number; y: number } | null {
