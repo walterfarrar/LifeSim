@@ -44,24 +44,6 @@ export function crossover(parentA: DNA, parentB: DNA, rng: Rng): DNA {
 
 export { mutate } from './mutation'
 
-/** Bias mate preferences toward this genome's body — helps founder populations pair. */
-export function alignMatePreferencesToBody(
-  dna: DNA,
-  rng: Rng,
-  noise: number,
-): void {
-  const jitter = () => (noise > 0 ? rng.int(-noise, noise) : 0)
-  dna[HerbivoreGene.PreferredHue] = clampByte(dna[HerbivoreGene.Hue] + jitter())
-  dna[HerbivoreGene.PreferredSize] = clampByte(dna[HerbivoreGene.Size] + jitter())
-  dna[HerbivoreGene.PreferredSpeed] = clampByte(dna[HerbivoreGene.Speed] + jitter())
-  dna[HerbivoreGene.GeneticAssortment] = clampByte(210 + rng.int(-18, 18))
-  dna[HerbivoreGene.MateSelectivity] = clampByte(65 + rng.int(-28, 28))
-  dna[HerbivoreGene.CourtshipEagerness] = clampByte(115 + rng.int(-35, 35))
-  dna[HerbivoreGene.CloseMateLeniency] = clampByte(110 + rng.int(-40, 40))
-  dna[HerbivoreGene.MutationRate] = clampByte(35 + rng.int(-12, 12))
-  dna[HerbivoreGene.MutationAmount] = clampByte(45 + rng.int(-12, 12))
-}
-
 export function createFounderVariantDNA(rng: Rng, founder: DNA, founderSettings: FounderSettings): DNA {
   const next = cloneDNA(founder)
   for (let i = 0; i < next.length; i++) {
@@ -82,7 +64,6 @@ function createFounderGroupDNA(
   founder[HerbivoreGene.Saturation] = clampByte(120 + rng.int(-35, 35))
   founder[HerbivoreGene.Size] = clampByte(90 + groupIndex * 18 + rng.int(-12, 12))
   founder[HerbivoreGene.Speed] = clampByte(100 + (groupCount - 1 - groupIndex) * 16 + rng.int(-12, 12))
-  alignMatePreferencesToBody(founder, rng, 0)
   return founder
 }
 
@@ -108,9 +89,6 @@ export function createMultiGroupPopulation(
   for (let group = 0; group < groupCount; group++) {
     const savedFounder = groupFounderDna?.[group]
     const founder = savedFounder ? cloneDNA(savedFounder) : createFounderGroupDNA(rng, group, groupCount)
-    if (savedFounder) {
-      alignMatePreferencesToBody(founder, rng, founderSettings.founderPreferenceNoise)
-    }
     const row = Math.floor(group / cols)
     const col = group % cols
     const centerX = (bounds.width / (cols + 1)) * (col + 1)

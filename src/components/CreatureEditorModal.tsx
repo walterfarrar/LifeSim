@@ -22,7 +22,8 @@ import {
   HERBIVORE_BUDGET_GENES,
   HERBIVORE_BUDGET_TOTAL,
 } from '../sim/creatureEditor'
-import { HERBIVORE_GENE_LABELS } from '../sim/geneLabels'
+import { GeneLabelTooltip } from './GeneLabelTooltip'
+import { HERBIVORE_GENE_DESCRIPTIONS, HERBIVORE_GENE_LABELS } from '../sim/geneLabels'
 import { isHerbivoreBudgetGene } from '../sim/herbivoreBudget'
 import { listFounderGenomeChoices } from '../sim/founderGenomes'
 import { expressHerbivore } from '../sim/phenotype'
@@ -108,7 +109,12 @@ export function CreatureEditorModal({ open, initialGenome, onClose }: CreatureEd
   const budgetUsed = useMemo(() => herbivoreBudgetSum(genes), [genes])
 
   const budgetGenes = useMemo(
-    () => HERBIVORE_BUDGET_GENES.map((gene) => ({ index: gene, label: HERBIVORE_GENE_LABELS[gene] ?? `Gene ${gene}` })),
+    () =>
+      HERBIVORE_BUDGET_GENES.map((gene) => ({
+        index: gene,
+        label: HERBIVORE_GENE_LABELS[gene] ?? `Gene ${gene}`,
+        description: HERBIVORE_GENE_DESCRIPTIONS[gene] ?? '',
+      })),
     [],
   )
 
@@ -120,6 +126,7 @@ export function CreatureEditorModal({ open, initialGenome, onClose }: CreatureEd
         .map((index) => ({
           index,
           label: HERBIVORE_GENE_LABELS[index] ?? `Gene ${index}`,
+          description: HERBIVORE_GENE_DESCRIPTIONS[index] ?? '',
         })),
     [genes],
   )
@@ -259,10 +266,10 @@ export function CreatureEditorModal({ open, initialGenome, onClose }: CreatureEd
                 <h3>Core traits (shared budget)</h3>
                 <p className="hint">Raising one lowers the others — total stays {HERBIVORE_BUDGET_TOTAL}.</p>
                 <ul className="creature-editor-gene-list">
-                  {budgetGenes.map(({ index, label }) => (
+                  {budgetGenes.map(({ index, label, description }) => (
                     <li key={index} className="creature-editor-gene-row budget">
                       <label>
-                        <span className="gene-label">{label}</span>
+                        <GeneLabelTooltip label={label} description={description} />
                         <span className="gene-value">{genes[index]}</span>
                         <input
                           type="range"
@@ -280,10 +287,10 @@ export function CreatureEditorModal({ open, initialGenome, onClose }: CreatureEd
               <section className="creature-editor-section">
                 <h3>Other genes</h3>
                 <ul className="creature-editor-gene-list">
-                  {otherGenes.map(({ index, label }) => (
+                  {otherGenes.map(({ index, label, description }) => (
                     <li key={index} className="creature-editor-gene-row">
                       <label>
-                        <span className="gene-label">{label}</span>
+                        <GeneLabelTooltip label={label} description={description} />
                         <span className="gene-value">{genes[index]}</span>
                         <input
                           type="range"

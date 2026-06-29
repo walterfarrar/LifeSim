@@ -170,7 +170,6 @@ export class World {
     const founderSettings = {
       founderGeneSpread: this.settings.founderGeneSpread,
       founderJitterChance: this.settings.founderJitterChance,
-      founderPreferenceNoise: this.settings.founderPreferenceNoise,
     }
     const groupFounderDna = resolveGroupFounderDnas(
       this.settings.creatureGroups,

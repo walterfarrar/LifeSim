@@ -327,14 +327,6 @@ export function SettingsModal({
                 max={100}
                 onChange={(pct) => onChange(patch(draft, { founderJitterChance: pct / 100 }))}
               />
-              <NumberField
-                label="Mate pref. noise"
-                hint="How far mate prefs drift from body"
-                value={draft.founderPreferenceNoise}
-                min={0}
-                max={40}
-                onChange={(founderPreferenceNoise) => onChange(patch(draft, { founderPreferenceNoise }))}
-              />
             </div>
           </details>
         </div>

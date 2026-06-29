@@ -43,4 +43,3 @@ export const PATHOGEN_CHAMPION_CHECK_INTERVAL = TICKS_PER_SECOND * 120
 /** Initial herbivores are variants of one founder — keeps early mating viable. */
 export const FOUNDER_GENE_SPREAD = 10
 export const FOUNDER_GENE_JITTER_CHANCE = 0.4
-export const FOUNDER_PREFERENCE_NOISE = 12

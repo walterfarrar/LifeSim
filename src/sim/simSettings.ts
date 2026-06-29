@@ -3,7 +3,6 @@ import {
   DEFAULT_WORLD_WIDTH,
   FOUNDER_GENE_JITTER_CHANCE,
   FOUNDER_GENE_SPREAD,
-  FOUNDER_PREFERENCE_NOISE,
   INITIAL_HERBIVORES,
   PATHOGEN_CHAMPION_SPAWN_CHANCE,
   scaledInitialPlants,
@@ -21,7 +20,6 @@ export type SimSettings = {
   maxPlants: number
   founderGeneSpread: number
   founderJitterChance: number
-  founderPreferenceNoise: number
   /** Saved genome id per group slot; empty string = random founder DNA. */
   groupFounders: string[]
   /** Re-seed at least one plant from the saved best species on each reset. */
@@ -38,7 +36,7 @@ export type SimSettings = {
 
 export type FounderSettings = Pick<
   SimSettings,
-  'founderGeneSpread' | 'founderJitterChance' | 'founderPreferenceNoise'
+  'founderGeneSpread' | 'founderJitterChance'
 >
 
 export const DEFAULT_SIM_SETTINGS: SimSettings = {
@@ -50,7 +48,6 @@ export const DEFAULT_SIM_SETTINGS: SimSettings = {
   maxPlants: scaledMaxPlants(DEFAULT_WORLD_WIDTH, DEFAULT_WORLD_HEIGHT),
   founderGeneSpread: FOUNDER_GENE_SPREAD,
   founderJitterChance: FOUNDER_GENE_JITTER_CHANCE,
-  founderPreferenceNoise: FOUNDER_PREFERENCE_NOISE,
   groupFounders: Array.from({ length: MAX_CREATURE_GROUPS }, () => ''),
   respawnBestPlantSpecies: true,
   plantFounderId: '',
