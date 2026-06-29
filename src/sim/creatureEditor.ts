@@ -30,70 +30,42 @@ export function herbivoreBudgetSum(genes: readonly number[]): number {
   return sum
 }
 
-/** Set one budget gene and transfer points from/to siblings so the pool total stays fixed. */
+/** Unspent budget points while editing (negative = over capacity). */
+export function herbivoreBudgetRemaining(genes: readonly number[]): number {
+  return HERBIVORE_BUDGET_TOTAL - herbivoreBudgetSum(genes)
+}
+
+export function isEditorBudgetValid(genes: readonly number[]): boolean {
+  return herbivoreBudgetRemaining(genes) >= 0
+}
+
+/** Clamp and pad editor genes without rebalancing the shared budget pool. */
+export function clampEditorGenes(genes: number[]): number[] {
+  const out = genes.slice(0, HERBIVORE_GENE_COUNT).map((g) => clampByte(g))
+  while (out.length < HERBIVORE_GENE_COUNT) {
+    const index = out.length
+    if (index === HerbivoreGene.CourtshipEagerness) {
+      out.push(DEFAULT_COURTSHIP_EAGERNESS_GENE)
+    } else if (index === HerbivoreGene.CloseMateLeniency) {
+      out.push(DEFAULT_CLOSE_MATE_LENIENCY_GENE)
+    } else if (index === HerbivoreGene.Cohesion) {
+      out.push(DEFAULT_COHESION_GENE)
+    } else {
+      out.push(127)
+    }
+  }
+  return out
+}
+
+/** Set one budget gene independently — pool remaining updates, no auto-transfer. */
 export function setHerbivoreBudgetGeneValue(genes: number[], geneIndex: number, rawValue: number): number[] {
-  if (!isHerbivoreBudgetGene(geneIndex)) {
-    const next = genes.slice()
-    next[geneIndex] = clampByte(rawValue)
-    return next
-  }
-
   const next = genes.slice()
-  const target = Math.max(HERBIVORE_BUDGET_MIN, Math.min(HERBIVORE_BUDGET_MAX, Math.round(rawValue)))
-  let delta = target - next[geneIndex]
-  next[geneIndex] = target
-  if (delta === 0) return next
-
-  const others = HERBIVORE_BUDGET_GENES.filter((gene) => gene !== geneIndex)
-
-  if (delta > 0) {
-    while (delta > 0) {
-      const donors = others
-        .map((gene) => ({ gene, slack: next[gene] - HERBIVORE_BUDGET_MIN }))
-        .filter((entry) => entry.slack > 0)
-        .sort((a, b) => b.slack - a.slack)
-      if (donors.length === 0) {
-        next[geneIndex] -= delta
-        break
-      }
-      let moved = 0
-      for (const donor of donors) {
-        if (delta <= 0) break
-        const take = Math.min(donor.slack, delta)
-        next[donor.gene] -= take
-        delta -= take
-        moved += take
-      }
-      if (moved === 0) break
-    }
-  } else {
-    let give = -delta
-    while (give > 0) {
-      const receivers = others
-        .map((gene) => ({ gene, headroom: HERBIVORE_BUDGET_MAX - next[gene] }))
-        .filter((entry) => entry.headroom > 0)
-        .sort((a, b) => b.headroom - a.headroom)
-      if (receivers.length === 0) {
-        next[geneIndex] += give
-        break
-      }
-      let moved = 0
-      for (const receiver of receivers) {
-        if (give <= 0) break
-        const add = Math.min(receiver.headroom, give)
-        next[receiver.gene] += add
-        give -= add
-        moved += add
-      }
-      if (moved === 0) break
-    }
-  }
-
+  next[geneIndex] = Math.max(HERBIVORE_BUDGET_MIN, Math.min(HERBIVORE_BUDGET_MAX, Math.round(rawValue)))
   return next
 }
 
 export function normalizeEditorGenes(genes: number[]): number[] {
-  return normalizeHerbivoreGenes(genes)
+  return clampEditorGenes(genes)
 }
 
 export function editorGenesToDna(genes: number[]) {

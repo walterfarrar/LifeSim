@@ -14,8 +14,10 @@ import {
   cloneSavedGenome,
   createDefaultEditorGenome,
   editorGenesToDna,
+  clampEditorGenes,
+  herbivoreBudgetRemaining,
   herbivoreBudgetSum,
-  normalizeEditorGenes,
+  isEditorBudgetValid,
   savedGenomeFromGenes,
   setEditorGeneValue,
   setEditorSex,
@@ -85,7 +87,7 @@ export function CreatureEditorModal({ open, initialGenome, onClose }: CreatureEd
   }, [])
 
   const applyGenome = useCallback((genome: SavedGenome, loadId: string) => {
-    const normalized = normalizeEditorGenes([...genome.genes])
+    const normalized = clampEditorGenes([...genome.genes])
     setSelectedLoadId(loadId)
     setGenomeId(genome.id)
     setName(genome.name)
@@ -107,6 +109,8 @@ export function CreatureEditorModal({ open, initialGenome, onClose }: CreatureEd
   const dna = useMemo(() => editorGenesToDna(genes), [genes])
   const traits = useMemo(() => expressHerbivore(dna), [dna])
   const budgetUsed = useMemo(() => herbivoreBudgetSum(genes), [genes])
+  const budgetRemaining = useMemo(() => herbivoreBudgetRemaining(genes), [genes])
+  const budgetValid = budgetRemaining >= 0
 
   const budgetGenes = useMemo(
     () =>
@@ -156,15 +160,22 @@ export function CreatureEditorModal({ open, initialGenome, onClose }: CreatureEd
   }
 
   const handleGeneChange = (geneIndex: number, value: number) => {
-    setGenes((current) => normalizeEditorGenes(setEditorGeneValue(current, geneIndex, value)))
+    setGenes((current) => clampEditorGenes(setEditorGeneValue(current, geneIndex, value)))
   }
 
   const handleSexChange = (next: SavedGenome['sex']) => {
     setSex(next)
-    setGenes((current) => normalizeEditorGenes(setEditorSex(current, next)))
+    setGenes((current) => clampEditorGenes(setEditorSex(current, next)))
+  }
+
+  const guardBudget = (): boolean => {
+    if (isEditorBudgetValid(genes)) return true
+    flash('Budget pool is over capacity — lower some core traits before saving.')
+    return false
   }
 
   const handleSave = () => {
+    if (!guardBudget()) return
     const saved = buildSaved()
     saveToGenomeLibrary(saved)
     setOptions(loadOptions())
@@ -174,6 +185,7 @@ export function CreatureEditorModal({ open, initialGenome, onClose }: CreatureEd
   }
 
   const handleSaveAsNew = () => {
+    if (!guardBudget()) return
     const saved = buildSaved({ id: `genome-${Date.now()}`, name: `${name.trim() || 'Creature'} (copy)` })
     saveToGenomeLibrary(saved)
     setOptions(loadOptions())
@@ -252,9 +264,16 @@ export function CreatureEditorModal({ open, initialGenome, onClose }: CreatureEd
           <div className="creature-editor-layout">
             <aside className="creature-editor-preview">
               <DnaAvatar dna={dna} sex={sex} size={96} />
-              <p className="creature-editor-budget">
-                Budget pool: <strong>{budgetUsed}</strong> / {HERBIVORE_BUDGET_TOTAL}
+              <p className={`creature-editor-budget${budgetValid ? '' : ' over-capacity'}`}>
+                Points remaining: <strong>{budgetRemaining}</strong>
+                <span className="creature-editor-budget-detail">
+                  {' '}
+                  ({budgetUsed} allocated · {HERBIVORE_BUDGET_TOTAL} pool)
+                </span>
               </p>
+              {!budgetValid && (
+                <p className="creature-editor-budget-warning">Over budget — lower core traits before saving.</p>
+              )}
               <details open className="creature-editor-traits-details">
                 <summary>Expressed traits</summary>
                 <ExpressedTraitsList traits={traits} />
@@ -264,7 +283,9 @@ export function CreatureEditorModal({ open, initialGenome, onClose }: CreatureEd
             <div className="creature-editor-genes">
               <section className="creature-editor-section">
                 <h3>Core traits (shared budget)</h3>
-                <p className="hint">Raising one lowers the others — total stays {HERBIVORE_BUDGET_TOTAL}.</p>
+                <p className="hint">
+                  Each slider moves on its own. Unspent points are fine; saving is blocked if remaining goes below zero.
+                </p>
                 <ul className="creature-editor-gene-list">
                   {budgetGenes.map(({ index, label, description }) => (
                     <li key={index} className="creature-editor-gene-row budget">
@@ -312,16 +333,20 @@ export function CreatureEditorModal({ open, initialGenome, onClose }: CreatureEd
 
         <footer className="settings-modal-footer creature-editor-footer">
           <div className="creature-editor-actions">
-            <button type="button" className="settings-primary" onClick={handleSave}>
+            <button type="button" className="settings-primary" onClick={handleSave} disabled={!budgetValid}>
               Save to library
             </button>
-            <button type="button" onClick={handleSaveAsNew}>
+            <button type="button" onClick={handleSaveAsNew} disabled={!budgetValid}>
               Save as new
             </button>
-            <button type="button" onClick={() => void copyGenomeToClipboard(buildSaved())}>
+            <button
+              type="button"
+              onClick={() => void copyGenomeToClipboard(buildSaved())}
+              disabled={!budgetValid}
+            >
               Copy JSON
             </button>
-            <button type="button" onClick={() => downloadGenomeFile(buildSaved())}>
+            <button type="button" onClick={() => downloadGenomeFile(buildSaved())} disabled={!budgetValid}>
               Download
             </button>
             <button type="button" onClick={() => importRef.current?.click()}>

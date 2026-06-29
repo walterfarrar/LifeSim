@@ -1080,6 +1080,22 @@ button:hover {
   text-align: center;
 }
 
+.creature-editor-budget.over-capacity strong {
+  color: #e8a0a0;
+}
+
+.creature-editor-budget-detail {
+  color: #7d9684;
+  font-size: 0.72rem;
+}
+
+.creature-editor-budget-warning {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #e8a0a0;
+  text-align: center;
+}
+
 .creature-editor-traits-details {
   width: 100%;
   font-size: 0.78rem;
