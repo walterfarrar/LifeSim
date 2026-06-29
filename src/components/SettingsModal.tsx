@@ -73,6 +73,9 @@ function setGroupFounder(settings: SimSettings, groupIndex: number, genomeId: st
 }
 
 function founderOptionLabel(genome: SavedGenome, autoChampion: AutoChampionRecord | null): string {
+  if (genome.id.startsWith('sample-founder-')) {
+    return genome.name
+  }
   if (genome.id === AUTO_CHAMPION_GENOME_ID && autoChampion) {
     return `All-time lineage · peak ${autoChampion.peakPopulation} · ${formatYears(autoChampion.lineageSpanTicks)} together`
   }
@@ -83,6 +86,12 @@ function founderHint(
   selectedId: string,
   autoChampion: AutoChampionRecord | null,
 ): string {
+  if (selectedId.startsWith('sample-founder-')) {
+    const sample = getFounderGenomeById(selectedId)
+    return sample
+      ? 'Built-in survival template — apply & restart to seed a group with this lineage'
+      : 'Sample founder template'
+  }
   if (!selectedId) return 'Random founder DNA for this group'
   if (selectedId === AUTO_CHAMPION_GENOME_ID && autoChampion) {
     return `${autoChampion.genome.sex} · ${autoChampion.population} alive · peak ${autoChampion.peakPopulation} · ${formatYears(autoChampion.lineageSpanTicks)}`

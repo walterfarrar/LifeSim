@@ -5,9 +5,15 @@ import {
   AUTO_CHAMPION_GENOME_ID,
   loadAutoChampionRecord,
 } from './autoChampion'
+import {
+  getSampleFounderGenomeById,
+  SAMPLE_FOUNDER_GENOMES,
+} from './sampleFounderGenomes'
 import type { DNA } from './dna'
 
 export function getFounderGenomeById(id: string): SavedGenome | undefined {
+  const sample = getSampleFounderGenomeById(id)
+  if (sample) return sample
   if (id === AUTO_CHAMPION_GENOME_ID) {
     return loadAutoChampionRecord()?.genome
   }
@@ -17,11 +23,20 @@ export function getFounderGenomeById(id: string): SavedGenome | undefined {
 export function listFounderGenomeChoices(): SavedGenome[] {
   const auto = loadAutoChampionRecord()?.genome
   const manual = loadSavedGenomeLibrary().filter((genome) => genome.id !== AUTO_CHAMPION_GENOME_ID)
-  return auto ? [auto, ...manual] : manual
+  const sampleIds = new Set(SAMPLE_FOUNDER_GENOMES.map((genome) => genome.id))
+  const extraManual = manual.filter((genome) => !sampleIds.has(genome.id))
+  const samples = [...SAMPLE_FOUNDER_GENOMES]
+  if (auto) {
+    return [auto, ...samples, ...extraManual]
+  }
+  return [...samples, ...extraManual]
 }
 
 export function validFounderGenomeIds(): Set<string> {
-  const ids = new Set(loadSavedGenomeLibrary().map((genome) => genome.id))
+  const ids = new Set([
+    ...SAMPLE_FOUNDER_GENOMES.map((genome) => genome.id),
+    ...loadSavedGenomeLibrary().map((genome) => genome.id),
+  ])
   if (loadAutoChampionRecord()) {
     ids.add(AUTO_CHAMPION_GENOME_ID)
   }
