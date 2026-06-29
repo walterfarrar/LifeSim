@@ -98,6 +98,15 @@ function collectInsights(traits: HerbivoreTraits, dna: DNA): Insight[] {
     })
   }
 
+  const cohesion = highIsBetter(traits.cohesion, 0.62, 0.28)
+  if (cohesion > 0.45) {
+    insights.push({
+      score: cohesion,
+      highlight: 'Group cohesion',
+      clause: 'stays near genetically similar kin instead of wandering off alone',
+    })
+  }
+
   const assortment = highIsBetter(traits.geneticAssortment, 0.68, 0.35)
   if (assortment > 0.45) {
     insights.push({

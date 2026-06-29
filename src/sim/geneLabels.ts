@@ -53,6 +53,7 @@ export const HERBIVORE_GENE_LABELS: Record<number, string> = {
   [HerbivoreGene.Contagion]: 'Contagion',
   [HerbivoreGene.CourtshipEagerness]: 'Courtship eagerness',
   [HerbivoreGene.CloseMateLeniency]: 'Close mate leniency',
+  [HerbivoreGene.Cohesion]: 'Cohesion',
 }
 
 export const PLANT_GENE_LABELS: Record<number, string> = {

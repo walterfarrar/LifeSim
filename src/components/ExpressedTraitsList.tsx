@@ -49,6 +49,7 @@ export function ExpressedTraitsList({ traits, attackCooldown }: ExpressedTraitsL
       <div><dt>Genetic assortment</dt><dd>{fmt(traits.geneticAssortment * 100, 0)}% target similarity</dd></div>
       <div><dt>Preference strength</dt><dd>{fmt(traits.matePreferenceStrength * 100, 0)}%</dd></div>
       <div><dt>Space tolerance</dt><dd>{fmt(traits.spaceTolerance * 100, 0)}%</dd></div>
+      <div><dt>Cohesion</dt><dd>{fmt(traits.cohesion * 100, 0)}%</dd></div>
       <div><dt>Personal space</dt><dd>{fmt(traits.personalSpace, 1)} px</dd></div>
       <div><dt>Aggressiveness</dt><dd>{fmt(traits.aggressiveness * 100, 0)}%</dd></div>
       <div><dt>Dissimilar predation</dt><dd>{fmt(traits.cannibalPredilection * 100, 0)}%</dd></div>

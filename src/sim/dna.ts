@@ -1,4 +1,5 @@
 import { HERBIVORE_GENE_COUNT, HerbivoreGene } from './genes'
+import { createRandomHerbivoreDNA } from './herbivoreBudget'
 import type { Rng } from './rng'
 import type { FounderSettings } from './simSettings'
 import type { Vec2 } from './types'
@@ -75,7 +76,7 @@ function createFounderGroupDNA(
   groupIndex: number,
   groupCount: number,
 ): DNA {
-  const founder = createRandomDNA(rng)
+  const founder = createRandomHerbivoreDNA(rng)
   const hueStep = 255 / Math.max(1, groupCount)
   founder[HerbivoreGene.Hue] = clampByte(groupIndex * hueStep + rng.int(-18, 18))
   founder[HerbivoreGene.Saturation] = clampByte(120 + rng.int(-35, 35))

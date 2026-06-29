@@ -60,6 +60,7 @@ import {
   mutuallyAcceptMate,
 } from './matePreference'
 import { applySpaceReaction, evaluateSpaceReaction } from './spaceBehavior'
+import { findCohesionTarget } from './cohesion'
 import { findBestPlantTarget } from './foraging'
 import {
   attemptPredation,
@@ -481,10 +482,35 @@ export class World {
       creature.wanderTicksRemaining -= 1
       return { x: creature.wanderX, y: creature.wanderY }
     }
-    creature.wanderX = this.rng.range(margin, this.bounds.width - margin)
-    creature.wanderY = this.rng.range(margin, this.bounds.height - margin)
-    creature.wanderTicksRemaining =
-      traits.wanderDurationMin + this.rng.int(0, traits.wanderDurationSpan)
+
+    const cohesionTarget = findCohesionTarget(creature, this.creatures)
+    const cohesionBias = traits.cohesion
+    const useCohesion = cohesionTarget !== null && this.rng.chance(cohesionBias * 0.72 + 0.12)
+
+    if (useCohesion && cohesionTarget) {
+      const jitter = 16 + (1 - cohesionBias) * 48
+      creature.wanderX = clamp(
+        cohesionTarget.x + this.rng.range(-jitter, jitter),
+        margin,
+        this.bounds.width - margin,
+      )
+      creature.wanderY = clamp(
+        cohesionTarget.y + this.rng.range(-jitter, jitter),
+        margin,
+        this.bounds.height - margin,
+      )
+      const baseDuration = traits.wanderDurationMin + this.rng.int(0, traits.wanderDurationSpan)
+      creature.wanderTicksRemaining = Math.max(
+        20,
+        Math.floor(baseDuration * (0.5 + cohesionBias * 0.75)),
+      )
+    } else {
+      creature.wanderX = this.rng.range(margin, this.bounds.width - margin)
+      creature.wanderY = this.rng.range(margin, this.bounds.height - margin)
+      creature.wanderTicksRemaining =
+        traits.wanderDurationMin + this.rng.int(0, traits.wanderDurationSpan)
+    }
+
     return { x: creature.wanderX, y: creature.wanderY }
   }
 
@@ -516,4 +542,8 @@ export class World {
     this.stats.corpseEnergy = energy.corpses
     this.stats.totalEnergy = energy.total
   }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
 }

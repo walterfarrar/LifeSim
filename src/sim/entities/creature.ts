@@ -1,4 +1,5 @@
-import { cloneDNA, createRandomDNA, crossover, mutate } from '../dna'
+import { cloneDNA, crossover, mutate } from '../dna'
+import { createRandomHerbivoreDNA } from '../herbivoreBudget'
 import { plantBiteEffectiveness } from '../foraging'
 import { expressCreatureTraits, expressSex } from '../phenotype'
 import { computeInbreedingLoad } from '../inbreeding'
@@ -16,7 +17,7 @@ export function resetCreatureIds(): void {
   nextCreatureId = 1
 }
 
-export function createHerbivore(rng: Rng, position?: Vec2, dna = createRandomDNA(rng)): Creature {
+export function createHerbivore(rng: Rng, position?: Vec2, dna = createRandomHerbivoreDNA(rng)): Creature {
   const bounds = getWorldBounds()
   const margin = Math.min(75, Math.max(40, Math.min(bounds.width, bounds.height) * 0.04))
   const traits = expressCreatureTraits(dna, 0)
