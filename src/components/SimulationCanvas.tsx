@@ -23,8 +23,10 @@ import type { Creature, Plant, WorldSnapshot } from '../sim/types'
 import { clientToWorld } from './canvasCoords'
 import {
   DEFAULT_VIEWPORT,
+  MIN_VIEWPORT_ZOOM,
   VIEWPORT_ZOOM_STEP,
   canvasDisplayLayout,
+  drawTiledWorld,
   zoomAtClientPoint,
   zoomAtViewportCenter,
   type ViewportTransform,
@@ -54,7 +56,9 @@ export function SimulationCanvas({
   onSelectCreature,
 }: SimulationCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const displayCanvasRef = useRef<HTMLCanvasElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
+  const viewportSizeRef = useRef({ width: 0, height: 0 })
   const worldRef = useRef<World | null>(null)
   const pausedRef = useRef(paused)
   const speedRef = useRef(speedMultiplier)
@@ -70,7 +74,6 @@ export function SimulationCanvas({
   })
   const [, setReady] = useState(false)
   const [viewport, setViewport] = useState<ViewportTransform>(DEFAULT_VIEWPORT)
-  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
 
   pausedRef.current = paused
   speedRef.current = speedMultiplier
@@ -93,10 +96,11 @@ export function SimulationCanvas({
     if (!viewportEl) return
 
     const updateSize = () => {
-      setViewportSize({
+      const next = {
         width: viewportEl.clientWidth,
         height: viewportEl.clientHeight,
-      })
+      }
+      viewportSizeRef.current = next
     }
 
     updateSize()
@@ -106,15 +110,17 @@ export function SimulationCanvas({
   }, [])
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || !worldRef.current) return
+    const worldCanvas = canvasRef.current
+    const displayCanvas = displayCanvasRef.current
+    if (!worldCanvas || !displayCanvas || !worldRef.current) return
 
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    const worldCtx = worldCanvas.getContext('2d')
+    const displayCtx = displayCanvas.getContext('2d')
+    if (!worldCtx || !displayCtx) return
 
     const world = worldRef.current
-    canvas.width = world.width
-    canvas.height = world.height
+    worldCanvas.width = world.width
+    worldCanvas.height = world.height
 
     let frameId = 0
     let lastTime = performance.now()
@@ -139,7 +145,23 @@ export function SimulationCanvas({
       }
 
       const snapshot = world.snapshot()
-      drawWorld(ctx, snapshot, selectedId, world.width, world.height)
+      drawWorld(worldCtx, snapshot, selectedId, world.width, world.height)
+
+      const viewportSize = viewportSizeRef.current
+      if (viewportSize.width > 0 && viewportSize.height > 0) {
+        if (displayCanvas.width !== viewportSize.width || displayCanvas.height !== viewportSize.height) {
+          displayCanvas.width = viewportSize.width
+          displayCanvas.height = viewportSize.height
+        }
+        const layout = canvasDisplayLayout(
+          viewportSize,
+          world.width,
+          world.height,
+          viewportRefState.current,
+        )
+        drawTiledWorld(displayCtx, worldCanvas, layout, viewportSize)
+      }
+
       if (snapshot.stats.tick !== lastReportedTick) {
         lastReportedTick = snapshot.stats.tick
         onSnapshot(snapshot)
@@ -242,10 +264,9 @@ export function SimulationCanvas({
       return
     }
 
-    const canvas = canvasRef.current
     const viewportEl = viewportRef.current
     const world = worldRef.current
-    if (!canvas || !viewportEl || !world) return
+    if (!viewportEl || !world) return
 
     const point = clientToWorld(
       viewportEl.getBoundingClientRect(),
@@ -264,11 +285,7 @@ export function SimulationCanvas({
     onSelectCreature(hit?.id ?? null)
   }
 
-  const world = worldRef.current
-  const layout =
-    world && viewportSize.width > 0
-      ? canvasDisplayLayout(viewportSize, world.width, world.height, viewport)
-      : null
+  const canZoomOut = viewport.zoom > MIN_VIEWPORT_ZOOM + 0.001
 
   return (
     <div
@@ -281,10 +298,17 @@ export function SimulationCanvas({
       {paused && <div className="paused-badge">Paused</div>}
       <VisualLegend />
       <div className="zoom-controls" aria-label="Map zoom">
-        <button type="button" onClick={() => zoomFromCenter(1 / VIEWPORT_ZOOM_STEP)} title="Zoom out">
+        <button
+          type="button"
+          onClick={() => zoomFromCenter(1 / VIEWPORT_ZOOM_STEP)}
+          disabled={!canZoomOut}
+          title="Zoom out (limited to full map)"
+        >
           −
         </button>
-        <span className="zoom-value">{Math.round(viewport.zoom * 100)}%</span>
+        <span className="zoom-value" title="100% = entire map visible">
+          {Math.round(viewport.zoom * 100)}%
+        </span>
         <button type="button" onClick={() => zoomFromCenter(VIEWPORT_ZOOM_STEP)} title="Zoom in">
           +
         </button>
@@ -300,21 +324,12 @@ export function SimulationCanvas({
         onPointerUp={finishPointer}
         onPointerCancel={finishPointer}
       >
+        <canvas ref={canvasRef} className="sim-canvas-source" aria-hidden="true" />
         <canvas
-          ref={canvasRef}
+          ref={displayCanvasRef}
           className="sim-canvas"
           aria-label="Evolution simulation world"
           onClick={handleClick}
-          style={
-            layout
-              ? {
-                  width: `${layout.width}px`,
-                  height: `${layout.height}px`,
-                  left: `${layout.left}px`,
-                  top: `${layout.top}px`,
-                }
-              : undefined
-          }
         />
       </div>
     </div>

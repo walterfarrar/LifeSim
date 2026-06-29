@@ -539,10 +539,21 @@ button:hover {
   pointer-events: none;
 }
 
+.sim-canvas-source {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .sim-canvas {
   position: absolute;
+  inset: 0;
   display: block;
-  background: #0f1410;
+  width: 100%;
+  height: 100%;
+  background: #0a0e0b;
   cursor: crosshair;
 }
 

@@ -1,4 +1,4 @@
-export const MIN_VIEWPORT_ZOOM = 0.35
+export const MIN_VIEWPORT_ZOOM = 1
 export const MAX_VIEWPORT_ZOOM = 4
 export const VIEWPORT_ZOOM_STEP = 1.25
 
@@ -12,6 +12,11 @@ export const DEFAULT_VIEWPORT: ViewportTransform = {
   zoom: 1,
   panX: 0,
   panY: 0,
+}
+
+export function wrapWorldCoordinate(value: number, size: number): number {
+  if (size <= 0) return 0
+  return ((value % size) + size) % size
 }
 
 export function clampViewportZoom(zoom: number): number {
@@ -45,6 +50,7 @@ function contentOrigin(
   }
 }
 
+/** Map a screen point to toroidal world coordinates (works on any visible tile copy). */
 export function clientToWorldCoords(
   viewportRect: DOMRect,
   clientX: number,
@@ -56,11 +62,10 @@ export function clientToWorldCoords(
   const { originX, originY, scale } = contentOrigin(viewportRect, worldWidth, worldHeight, viewport)
   if (scale <= 0) return null
 
-  const x = (clientX - originX) / scale
-  const y = (clientY - originY) / scale
-
-  if (x < 0 || y < 0 || x > worldWidth || y > worldHeight) return null
-  return { x, y }
+  return {
+    x: wrapWorldCoordinate((clientX - originX) / scale, worldWidth),
+    y: wrapWorldCoordinate((clientY - originY) / scale, worldHeight),
+  }
 }
 
 export function zoomAtClientPoint(
@@ -125,5 +130,29 @@ export function canvasDisplayLayout(
     height,
     left: (viewportSize.width - width) * 0.5 + viewport.panX,
     top: (viewportSize.height - height) * 0.5 + viewport.panY,
+  }
+}
+
+export function drawTiledWorld(
+  ctx: CanvasRenderingContext2D,
+  source: CanvasImageSource,
+  layout: { width: number; height: number; left: number; top: number },
+  viewportSize: { width: number; height: number },
+): void {
+  ctx.fillStyle = '#0a0e0b'
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+
+  const { width: tileW, height: tileH, left: startX, top: startY } = layout
+  if (tileW <= 0 || tileH <= 0 || viewportSize.width <= 0 || viewportSize.height <= 0) return
+
+  const minTx = Math.floor((0 - startX) / tileW) - 1
+  const maxTx = Math.ceil((viewportSize.width - startX) / tileW)
+  const minTy = Math.floor((0 - startY) / tileH) - 1
+  const maxTy = Math.ceil((viewportSize.height - startY) / tileH)
+
+  for (let tx = minTx; tx <= maxTx; tx++) {
+    for (let ty = minTy; ty <= maxTy; ty++) {
+      ctx.drawImage(source, startX + tx * tileW, startY + ty * tileH, tileW, tileH)
+    }
   }
 }
