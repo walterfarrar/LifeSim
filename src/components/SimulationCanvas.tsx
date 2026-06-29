@@ -3,7 +3,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type MouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { TICKS_PER_SECOND } from '../sim/config'
@@ -44,7 +43,7 @@ type SimulationCanvasProps = {
   onSelectCreature: (id: number | null) => void
 }
 
-const DRAG_THRESHOLD_PX = 4
+const DRAG_THRESHOLD_PX = 6
 
 export function SimulationCanvas({
   paused,
@@ -217,6 +216,31 @@ export function SimulationCanvas({
     [applyViewport],
   )
 
+  const pickCreatureAtClient = useCallback(
+    (clientX: number, clientY: number) => {
+      const viewportEl = viewportRef.current
+      const world = worldRef.current
+      if (!viewportEl || !world) return
+
+      const point = clientToWorld(
+        viewportEl.getBoundingClientRect(),
+        clientX,
+        clientY,
+        world.width,
+        world.height,
+        viewportRefState.current,
+      )
+      if (!point) {
+        onSelectCreature(null)
+        return
+      }
+
+      const hit = pickCreatureAt(world.snapshot().creatures, point.x, point.y, world.width, world.height)
+      onSelectCreature(hit?.id ?? null)
+    },
+    [onSelectCreature],
+  )
+
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
     dragRef.current = {
@@ -252,37 +276,17 @@ export function SimulationCanvas({
   const finishPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current
     if (!drag.active || drag.pointerId !== event.pointerId) return
+
+    const wasClick = !drag.moved
     drag.active = false
+    drag.moved = false
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
-  }
 
-  const handleClick = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (dragRef.current.moved) {
-      dragRef.current.moved = false
-      return
+    if (wasClick) {
+      pickCreatureAtClient(event.clientX, event.clientY)
     }
-
-    const viewportEl = viewportRef.current
-    const world = worldRef.current
-    if (!viewportEl || !world) return
-
-    const point = clientToWorld(
-      viewportEl.getBoundingClientRect(),
-      event.clientX,
-      event.clientY,
-      world.width,
-      world.height,
-      viewportRefState.current,
-    )
-    if (!point) {
-      onSelectCreature(null)
-      return
-    }
-
-    const hit = pickCreatureAt(world.snapshot().creatures, point.x, point.y, world.width, world.height)
-    onSelectCreature(hit?.id ?? null)
   }
 
   const canZoomOut = viewport.zoom > MIN_VIEWPORT_ZOOM + 0.001
@@ -329,7 +333,6 @@ export function SimulationCanvas({
           ref={displayCanvasRef}
           className="sim-canvas"
           aria-label="Evolution simulation world"
-          onClick={handleClick}
         />
       </div>
     </div>
