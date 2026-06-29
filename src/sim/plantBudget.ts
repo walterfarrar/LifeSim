@@ -1,5 +1,6 @@
 import type { DNA } from './dna'
 import { PlantGene, type PlantGeneIndex } from './genes'
+import { plantBudgetTotalForDna } from './plantKinds'
 import type { Rng } from './rng'
 
 /** Gameplay traits that share a fixed point pool — raising one lowers the others. */
@@ -14,7 +15,7 @@ export const PLANT_BUDGET_GENES: readonly PlantGeneIndex[] = [
   PlantGene.Hardiness,
 ] as const
 
-/** Sum of all budget-gene values (8 genes × 160 — bumped from 127 for stronger plants). */
+/** Bush budget — default reference total (8 genes × 160). */
 export const PLANT_BUDGET_TOTAL = PLANT_BUDGET_GENES.length * 160
 
 export const PLANT_BUDGET_MIN = 20
@@ -30,28 +31,37 @@ function clampByte(value: number): number {
   return Math.max(0, Math.min(255, Math.round(value)))
 }
 
-/** Randomly split the shared pool across budget genes (each gets at least PLANT_BUDGET_MIN). */
-function randomBudgetAllocation(rng: Rng): number[] {
+/** Randomly split a point pool across budget genes (each gets at least PLANT_BUDGET_MIN). */
+export function allocatePlantBudget(
+  rng: Rng,
+  total: number,
+  weights?: readonly number[],
+): number[] {
   const count = PLANT_BUDGET_GENES.length
   const reserved = PLANT_BUDGET_MIN * count
-  const remaining = PLANT_BUDGET_TOTAL - reserved
-  const weights = Array.from({ length: count }, () => rng.range(0.05, 1))
-  const weightSum = weights.reduce((acc, w) => acc + w, 0)
+  const remaining = Math.max(0, total - reserved)
+  const geneWeights =
+    weights && weights.length === count
+      ? weights
+      : Array.from({ length: count }, () => 1)
+  const weightSum = geneWeights.reduce((acc, weight) => acc + weight, 0)
 
-  const values = weights.map((w) => PLANT_BUDGET_MIN + Math.floor((w / weightSum) * remaining))
-  rebalanceBudgetValues(values, rng)
+  const values = geneWeights.map(
+    (weight) => PLANT_BUDGET_MIN + Math.floor((weight / weightSum) * remaining),
+  )
+  rebalanceBudgetValues(values, total, rng)
   return values
 }
 
-function equalBudgetAllocation(): number[] {
+function equalBudgetAllocation(total: number): number[] {
   const count = PLANT_BUDGET_GENES.length
-  const values = Array.from({ length: count }, () => Math.floor(PLANT_BUDGET_TOTAL / count))
-  rebalanceBudgetValues(values)
+  const values = Array.from({ length: count }, () => Math.floor(total / count))
+  rebalanceBudgetValues(values, total)
   return values
 }
 
-/** Nudge values so they sum to PLANT_BUDGET_TOTAL while respecting min/max. */
-function rebalanceBudgetValues(values: number[], rng?: Rng): void {
+/** Nudge values so they sum to `total` while respecting min/max. */
+function rebalanceBudgetValues(values: number[], total: number, rng?: Rng): void {
   for (let i = 0; i < values.length; i++) {
     values[i] = Math.max(PLANT_BUDGET_MIN, Math.min(PLANT_BUDGET_MAX, values[i]))
   }
@@ -59,8 +69,8 @@ function rebalanceBudgetValues(values: number[], rng?: Rng): void {
   let guard = 0
   let slot = 0
   while (guard++ < 4096) {
-    const sum = values.reduce((acc, v) => acc + v, 0)
-    const delta = PLANT_BUDGET_TOTAL - sum
+    const sum = values.reduce((acc, value) => acc + value, 0)
+    const delta = total - sum
     if (delta === 0) return
 
     if (delta > 0) {
@@ -84,47 +94,32 @@ function rebalanceBudgetValues(values: number[], rng?: Rng): void {
   }
 }
 
-/** Scale or redistribute budget genes so their sum matches PLANT_BUDGET_TOTAL. */
-export function normalizePlantBudget(dna: DNA): void {
+/** Scale or redistribute budget genes so their sum matches the lineage pool size. */
+export function normalizePlantBudget(dna: DNA, total?: number): void {
+  const budgetTotal = total ?? plantBudgetTotalForDna(dna)
   const values = PLANT_BUDGET_GENES.map((gene) => dna[gene])
-  const sum = values.reduce((acc, v) => acc + v, 0)
+  const sum = values.reduce((acc, value) => acc + value, 0)
 
   if (sum <= 0) {
-    const fresh = equalBudgetAllocation()
+    const fresh = equalBudgetAllocation(budgetTotal)
     PLANT_BUDGET_GENES.forEach((gene, index) => {
       dna[gene] = fresh[index]
     })
     return
   }
 
-  if (sum !== PLANT_BUDGET_TOTAL) {
-    const scaled = values.map((value) => (value / sum) * PLANT_BUDGET_TOTAL)
+  if (sum !== budgetTotal) {
+    const scaled = values.map((value) => (value / sum) * budgetTotal)
     for (let i = 0; i < values.length; i++) {
       values[i] = Math.round(scaled[i])
     }
   }
 
-  rebalanceBudgetValues(values)
+  rebalanceBudgetValues(values, budgetTotal)
 
   PLANT_BUDGET_GENES.forEach((gene, index) => {
     dna[gene] = clampByte(values[index])
   })
-}
-
-export function createRandomPlantDNA(rng: Rng): DNA {
-  const dna = new Uint8Array(15)
-  for (let i = 0; i < dna.length; i++) {
-    if (!isPlantBudgetGene(i)) {
-      dna[i] = rng.int(0, 255)
-    }
-  }
-
-  const allocation = randomBudgetAllocation(rng)
-  PLANT_BUDGET_GENES.forEach((gene, index) => {
-    dna[gene] = allocation[index]
-  })
-
-  return dna
 }
 
 /** Move points from one budget gene to another — total pool stays fixed. */

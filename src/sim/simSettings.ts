@@ -6,9 +6,6 @@ import {
   FOUNDER_PREFERENCE_NOISE,
   INITIAL_HERBIVORES,
   PATHOGEN_CHAMPION_SPAWN_CHANCE,
-  PLANT_LOW_COUNT_BOOST,
-  PLANT_SPAWN_CHANCE,
-  PLANT_WIND_SPAWN_CHANCE,
   scaledInitialPlants,
   scaledMaxPlants,
 } from './config'
@@ -22,9 +19,6 @@ export type SimSettings = {
   herbivoresPerGroup: number
   initialPlants: number
   maxPlants: number
-  plantSpawnChance: number
-  plantWindSpawnChance: number
-  plantLowCountBoost: number
   founderGeneSpread: number
   founderJitterChance: number
   founderPreferenceNoise: number
@@ -54,9 +48,6 @@ export const DEFAULT_SIM_SETTINGS: SimSettings = {
   herbivoresPerGroup: Math.max(4, Math.floor(INITIAL_HERBIVORES / 3)),
   initialPlants: scaledInitialPlants(DEFAULT_WORLD_WIDTH, DEFAULT_WORLD_HEIGHT),
   maxPlants: scaledMaxPlants(DEFAULT_WORLD_WIDTH, DEFAULT_WORLD_HEIGHT),
-  plantSpawnChance: PLANT_SPAWN_CHANCE,
-  plantWindSpawnChance: PLANT_WIND_SPAWN_CHANCE,
-  plantLowCountBoost: PLANT_LOW_COUNT_BOOST,
   founderGeneSpread: FOUNDER_GENE_SPREAD,
   founderJitterChance: FOUNDER_GENE_JITTER_CHANCE,
   founderPreferenceNoise: FOUNDER_PREFERENCE_NOISE,

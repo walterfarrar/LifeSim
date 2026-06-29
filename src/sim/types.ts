@@ -81,6 +81,9 @@ export interface WorldStats {
   creatureEnergy: number
   corpseEnergy: number
   primaryProduction: number
+  grassPlantCount: number
+  bushPlantCount: number
+  treePlantCount: number
 }
 
 export interface WorldSnapshot {

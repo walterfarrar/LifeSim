@@ -190,6 +190,9 @@ function App() {
     creatureEnergy: 0,
     corpseEnergy: 0,
     primaryProduction: 0,
+    grassPlantCount: 0,
+    bushPlantCount: 0,
+    treePlantCount: 0,
   }
 
   const pendingSettingsChanges = settingsRunKey(draftSettings) !== settingsRunKey(activeSettings)

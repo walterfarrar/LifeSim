@@ -50,7 +50,9 @@ import {
   createPlantWithDna,
   growPlant,
   isPlantEdible,
+  plantPopulationSpawnAttempts,
   plantReproductionChance,
+  pickPlantForReproduction,
   plantTraits,
   resetPlantIds,
 } from './entities/plant'
@@ -78,6 +80,8 @@ import {
   energyFromPreyBiomass,
   sumEntityEnergy,
 } from './energyEconomy'
+import { PLANT_EXTINCT_WIND_RESEED_CHANCE } from './config'
+import { countPlantsByKind } from './plantKinds'
 import { Rng } from './rng'
 import type { Corpse, Creature, Plant, WorldSnapshot, WorldStats } from './types'
 
@@ -100,6 +104,9 @@ export class World {
     creatureEnergy: 0,
     corpseEnergy: 0,
     primaryProduction: 0,
+    grassPlantCount: 0,
+    bushPlantCount: 0,
+    treePlantCount: 0,
   }
   private primaryProductionThisTick = 0
 
@@ -145,6 +152,9 @@ export class World {
       creatureEnergy: 0,
       corpseEnergy: 0,
       primaryProduction: 0,
+      grassPlantCount: 0,
+      bushPlantCount: 0,
+      treePlantCount: 0,
     }
     this.primaryProductionThisTick = 0
 
@@ -218,17 +228,12 @@ export class World {
   }
 
   private spawnPlants(): void {
-    const {
-      maxPlants,
-      plantWindSpawnChance,
-      plantLowCountBoost,
-      plantSpawnChance,
-    } = this.settings
+    const { maxPlants } = this.settings
 
     if (this.plants.length >= maxPlants) return
 
     if (this.plants.length === 0) {
-      if (this.rng.chance(plantWindSpawnChance)) {
+      if (this.rng.chance(PLANT_EXTINCT_WIND_RESEED_CHANCE)) {
         const plant = createPlant(this.rng)
         this.plants.push(plant)
         this.primaryProductionThisTick += plant.energy
@@ -236,23 +241,12 @@ export class World {
       return
     }
 
-    const tickChance =
-      this.plants.length < plantLowCountBoost
-        ? plantSpawnChance * 2.5
-        : plantSpawnChance
-    const attempts = Math.max(
-      1,
-      Math.min(10, Math.round(Math.sqrt(this.plants.length) / 5)),
-    )
+    const attempts = plantPopulationSpawnAttempts(this.plants)
 
     for (let attempt = 0; attempt < attempts; attempt++) {
       if (this.plants.length >= maxPlants) return
-      if (!this.rng.chance(tickChance)) continue
 
-      const parentIndex = this.rng.int(0, this.plants.length - 1)
-      const parent = this.plants[parentIndex]
-      if (!parent) continue
-
+      const parent = pickPlantForReproduction(this.rng, this.plants)
       if (!this.rng.chance(plantReproductionChance(parent))) continue
 
       const parentTraits = plantTraits(parent)
@@ -543,6 +537,11 @@ export class World {
     this.stats.plantCount = this.plants.length
     this.stats.herbivoreCount = this.creatures.length
     this.stats.primaryProduction = this.primaryProductionThisTick
+
+    const kindCounts = countPlantsByKind(this.plants)
+    this.stats.grassPlantCount = kindCounts.grass
+    this.stats.bushPlantCount = kindCounts.bush
+    this.stats.treePlantCount = kindCounts.tree
 
     const energy = sumEntityEnergy(this.plants, this.creatures, this.corpses)
     this.stats.plantEnergy = energy.plants

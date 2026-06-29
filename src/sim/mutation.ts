@@ -1,9 +1,10 @@
+import type { DNA } from './dna'
 import { LARGE_MUTATION_CHANCE } from './config'
 import { cloneDNA, geneValue } from './dna'
-import type { DNA } from './dna'
 import { HerbivoreGene, PlantGene } from './genes'
 import { isHerbivoreBudgetGene, transferHerbivoreBudget } from './herbivoreBudget'
-import { isPlantBudgetGene, transferPlantBudget } from './plantBudget'
+import { isPlantBudgetGene, normalizePlantBudget, transferPlantBudget } from './plantBudget'
+import { PLANT_KIND_GENE, plantKindFromDna } from './plantKinds'
 import type { Rng } from './rng'
 
 function clampByte(value: number): number {
@@ -76,12 +77,15 @@ function plantMutationParams(dna: DNA): {
   }
 }
 
-/** Asexual offspring mutations — parent mutation genes set the rate. */
+/** Asexual offspring mutations — parent mutation genes set the rate. Kind stays fixed. */
 export function mutatePlant(dna: DNA, rng: Rng): DNA {
   const next = cloneDNA(dna)
+  const parentKind = plantKindFromDna(dna)
+  const kindGene = dna.length > PlantGene.Kind ? dna[PlantGene.Kind] : PLANT_KIND_GENE[parentKind]
   const { perGeneRate, smallAmount, largeAmount } = plantMutationParams(next)
 
   for (let i = 0; i < next.length; i++) {
+    if (i === PlantGene.Kind) continue
     if (isPlantBudgetGene(i)) continue
     if (!rng.chance(perGeneRate)) continue
 
@@ -97,5 +101,8 @@ export function mutatePlant(dna: DNA, rng: Rng): DNA {
     transferPlantBudget(next, rng, amount)
   }
 
+  next[PlantGene.Kind] = kindGene
+  normalizePlantBudget(next)
+  next[PlantGene.Kind] = kindGene
   return next
 }

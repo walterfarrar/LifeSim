@@ -68,7 +68,7 @@ export const DEFAULT_COHESION_GENE = 110
 export type HerbivoreGeneIndex = (typeof HerbivoreGene)[keyof typeof HerbivoreGene]
 
 /** Plant genome — color, growth, and spread are all heritable. */
-export const PLANT_GENE_COUNT = 15
+export const PLANT_GENE_COUNT = 16
 
 export const PlantGene = {
   GreenHue: 0,
@@ -86,6 +86,8 @@ export const PlantGene = {
   Hardiness: 12,
   LeafLobes: 13,
   LeafPointiness: 14,
+  /** Fixed lineage marker — grass / bush / tree (not in the budget pool). */
+  Kind: 15,
 } as const
 
 export type PlantGeneIndex = (typeof PlantGene)[keyof typeof PlantGene]

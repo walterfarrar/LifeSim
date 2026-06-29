@@ -94,7 +94,13 @@ export function StatsPanel({
         </div>
         <div>
           <dt>Plants</dt>
-          <dd>{stats.plantCount}</dd>
+          <dd title="Grass · bush · tree lineages">
+            {stats.plantCount}
+            <span className="plant-kind-breakdown">
+              {' '}
+              · {stats.grassPlantCount} grass · {stats.bushPlantCount} bush · {stats.treePlantCount} tree
+            </span>
+          </dd>
         </div>
         <div>
           <dt>Creatures</dt>

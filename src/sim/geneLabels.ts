@@ -72,6 +72,7 @@ export const PLANT_GENE_LABELS: Record<number, string> = {
   [PlantGene.Hardiness]: 'Hardiness',
   [PlantGene.LeafLobes]: 'Leaf lobes',
   [PlantGene.LeafPointiness]: 'Leaf pointiness',
+  [PlantGene.Kind]: 'Lineage kind',
 }
 
 export const PATHOGEN_GENE_LABELS: Record<number, string> = {

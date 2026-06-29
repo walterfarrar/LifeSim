@@ -16,10 +16,8 @@ export const TICKS_PER_SECOND = 30
 export const INITIAL_PLANTS = 650
 export const INITIAL_HERBIVORES = 40
 export const MAX_PLANTS = 1600
-export const PLANT_SPAWN_CHANCE = 0.055
-/** Chance per tick to seed a random plant when the map is completely bare. */
-export const PLANT_WIND_SPAWN_CHANCE = 0.18
-export const PLANT_LOW_COUNT_BOOST = 45
+/** Rare wind-borne seed when the map has zero plants (simulation constant, not a setting). */
+export const PLANT_EXTINCT_WIND_RESEED_CHANCE = 0.15
 
 const REFERENCE_WORLD_AREA = DEFAULT_WORLD_WIDTH * DEFAULT_WORLD_HEIGHT
 

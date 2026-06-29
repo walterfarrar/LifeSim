@@ -1,6 +1,7 @@
 import { cloneDNA } from '../dna'
 import { mutatePlant } from '../mutation'
-import { createRandomPlantDNA, normalizePlantBudget } from '../plantBudget'
+import { createRandomPlantDNA, plantKindLabelFromDna } from '../plantKinds'
+import { normalizePlantGenes } from '../genomeNormalize'
 import { expressPlant } from '../phenotype'
 import type { Rng } from '../rng'
 import type { Plant, Vec2 } from '../types'
@@ -14,6 +15,19 @@ export function resetPlantIds(): void {
 
 export function plantTraits(plant: Plant) {
   return expressPlant(plant.dna)
+}
+
+export function plantLineageLabel(plant: Plant): string {
+  return plantKindLabelFromDna(plant.dna)
+}
+
+function finalizePlantDna(dna: Plant['dna']): Plant['dna'] {
+  const genes = normalizePlantGenes(Array.from(dna))
+  const out = new Uint8Array(genes.length)
+  for (let i = 0; i < genes.length; i++) {
+    out[i] = genes[i]
+  }
+  return out
 }
 
 function plantMargin(bounds = getWorldBounds()): number {
@@ -30,7 +44,9 @@ export function createPlant(
   parentDna?: Plant['dna'],
   initialEnergy?: number,
 ): Plant {
-  const dna = parentDna ? mutatePlant(cloneDNA(parentDna), rng) : createRandomPlantDNA(rng)
+  const dna = parentDna
+    ? finalizePlantDna(mutatePlant(cloneDNA(parentDna), rng))
+    : finalizePlantDna(createRandomPlantDNA(rng))
   return buildPlant(rng, dna, position, initialEnergy)
 }
 
@@ -41,9 +57,7 @@ export function createPlantWithDna(
   position?: Vec2,
   initialEnergy?: number,
 ): Plant {
-  const normalized = cloneDNA(dna)
-  normalizePlantBudget(normalized)
-  return buildPlant(rng, normalized, position, initialEnergy)
+  return buildPlant(rng, finalizePlantDna(dna), position, initialEnergy)
 }
 
 function buildPlant(
@@ -80,13 +94,52 @@ export function plantSpreadRange(parent: Plant): { min: number; max: number } {
   }
 }
 
-/** Per-tick chance a mature parent produces a seedling (independent of global spawn roll). */
+/** Per-tick chance a parent produces a seedling — driven by reproduction & spread genes. */
 export function plantReproductionChance(parent: Plant): number {
   const traits = plantTraits(parent)
   const maturity = Math.min(1, parent.age / traits.maturationAge)
   const energyRatio = Math.min(1, parent.energy / traits.maxEnergy)
-  const readiness = 0.12 + maturity * 0.48 + energyRatio * 0.4
-  return Math.min(1, readiness * traits.reproductionRate)
+  const readiness = maturity * 0.58 + energyRatio * 0.42
+  const spreadDrive = 0.55 + Math.min(1, traits.spreadMax / 140) * 0.45
+  return Math.min(1, readiness * traits.reproductionRate * spreadDrive * 0.034)
+}
+
+/** How many reproduction rolls the population gets this tick (scales with count & avg reproduction). */
+export function plantPopulationSpawnAttempts(plants: readonly Plant[]): number {
+  if (plants.length === 0) return 0
+
+  let reproductionSum = 0
+  for (const plant of plants) {
+    reproductionSum += plantTraits(plant).reproductionRate
+  }
+  const avgReproduction = reproductionSum / plants.length
+  const base = Math.max(1, Math.round(Math.sqrt(plants.length) / 3.5))
+  return Math.max(1, Math.min(18, Math.round(base * (0.6 + avgReproduction * 0.35))))
+}
+
+/** Prefer parents with higher reproduction and spread genes. */
+export function pickPlantForReproduction(rng: Rng, plants: readonly Plant[]): Plant {
+  let totalWeight = 0
+  const weights: number[] = []
+
+  for (const plant of plants) {
+    const traits = plantTraits(plant)
+    const weight = traits.reproductionRate * (0.35 + traits.spreadMax / 180)
+    weights.push(weight)
+    totalWeight += weight
+  }
+
+  if (totalWeight <= 0) {
+    return plants[rng.int(0, plants.length - 1)]
+  }
+
+  let roll = rng.range(0, totalWeight)
+  for (let i = 0; i < plants.length; i++) {
+    roll -= weights[i]
+    if (roll <= 0) return plants[i]
+  }
+
+  return plants[plants.length - 1]
 }
 
 /** Spawn a new plant within spread distance of an existing one. */

@@ -217,32 +217,6 @@ export function SettingsModal({
                 max={5000}
                 onChange={(maxPlants) => onChange(patch(draft, { maxPlants }))}
               />
-              <NumberField
-                label="Spread chance"
-                hint="Per tick when plants exist (%)"
-                value={Math.round(draft.plantSpawnChance * 1000) / 10}
-                min={0}
-                max={20}
-                step={0.1}
-                onChange={(pct) => onChange(patch(draft, { plantSpawnChance: pct / 100 }))}
-              />
-              <NumberField
-                label="Wind seed chance"
-                hint="When map is bare (%)"
-                value={Math.round(draft.plantWindSpawnChance * 1000) / 10}
-                min={0}
-                max={50}
-                step={0.1}
-                onChange={(pct) => onChange(patch(draft, { plantWindSpawnChance: pct / 100 }))}
-              />
-              <NumberField
-                label="Low plant boost"
-                hint="Count below which spread doubles"
-                value={draft.plantLowCountBoost}
-                min={0}
-                max={200}
-                onChange={(plantLowCountBoost) => onChange(patch(draft, { plantLowCountBoost }))}
-              />
               <label className="settings-field settings-field-checkbox">
                 <span className="settings-label">Respawn best plant species</span>
                 <span className="settings-hint">
