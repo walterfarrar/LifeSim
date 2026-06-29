@@ -2,6 +2,7 @@ import { LARGE_MUTATION_CHANCE } from './config'
 import { cloneDNA, geneValue } from './dna'
 import type { DNA } from './dna'
 import { HerbivoreGene, PlantGene } from './genes'
+import { isPlantBudgetGene, transferPlantBudget } from './plantBudget'
 import type { Rng } from './rng'
 
 function clampByte(value: number): number {
@@ -74,6 +75,7 @@ export function mutatePlant(dna: DNA, rng: Rng): DNA {
   const { perGeneRate, smallAmount, largeAmount } = plantMutationParams(next)
 
   for (let i = 0; i < next.length; i++) {
+    if (isPlantBudgetGene(i)) continue
     if (!rng.chance(perGeneRate)) continue
 
     const delta = rng.chance(LARGE_MUTATION_CHANCE)
@@ -81,6 +83,11 @@ export function mutatePlant(dna: DNA, rng: Rng): DNA {
       : nonZeroSmallDelta(rng, smallAmount)
 
     next[i] = clampByte(next[i] + delta)
+  }
+
+  if (rng.chance(perGeneRate)) {
+    const amount = rng.chance(LARGE_MUTATION_CHANCE) ? largeAmount : smallAmount
+    transferPlantBudget(next, rng, amount)
   }
 
   return next

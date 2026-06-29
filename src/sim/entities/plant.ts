@@ -1,6 +1,6 @@
-import { cloneDNA, createRandomDNA } from '../dna'
-import { PLANT_GENE_COUNT } from '../genes'
+import { cloneDNA } from '../dna'
 import { mutatePlant } from '../mutation'
+import { createRandomPlantDNA, normalizePlantBudget } from '../plantBudget'
 import { expressPlant } from '../phenotype'
 import type { Rng } from '../rng'
 import type { Plant, Vec2 } from '../types'
@@ -26,7 +26,7 @@ export function createPlant(
   parentDna?: Plant['dna'],
   initialEnergy?: number,
 ): Plant {
-  const dna = parentDna ? mutatePlant(cloneDNA(parentDna), rng) : createRandomDNA(rng, PLANT_GENE_COUNT)
+  const dna = parentDna ? mutatePlant(cloneDNA(parentDna), rng) : createRandomPlantDNA(rng)
   return buildPlant(rng, dna, position, initialEnergy)
 }
 
@@ -37,7 +37,9 @@ export function createPlantWithDna(
   position?: Vec2,
   initialEnergy?: number,
 ): Plant {
-  return buildPlant(rng, cloneDNA(dna), position, initialEnergy)
+  const normalized = cloneDNA(dna)
+  normalizePlantBudget(normalized)
+  return buildPlant(rng, normalized, position, initialEnergy)
 }
 
 function buildPlant(

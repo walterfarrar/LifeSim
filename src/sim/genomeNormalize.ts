@@ -6,6 +6,7 @@ import {
   PATHOGEN_GENE_COUNT,
   HerbivoreGene,
 } from './genes'
+import { normalizePlantBudget } from './plantBudget'
 
 /** Pad or trim saved genomes so older 50-gene champions still load. */
 export function normalizeHerbivoreGenes(genes: number[]): number[] {
@@ -23,13 +24,15 @@ export function normalizeHerbivoreGenes(genes: number[]): number[] {
   return out
 }
 
-/** Pad or trim saved plant genomes. */
+/** Pad or trim saved plant genomes and enforce the shared trait budget. */
 export function normalizePlantGenes(genes: number[]): number[] {
   const out = genes.slice(0, PLANT_GENE_COUNT).map((g) => Math.max(0, Math.min(255, Math.round(g))))
   while (out.length < PLANT_GENE_COUNT) {
     out.push(127)
   }
-  return out
+  const dna = new Uint8Array(out)
+  normalizePlantBudget(dna)
+  return Array.from(dna)
 }
 
 /** Pad or trim saved pathogen genomes. */
