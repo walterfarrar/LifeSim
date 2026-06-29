@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChampionHallModal } from './components/ChampionHallModal'
+import { CreatureEditorModal } from './components/CreatureEditorModal'
 import { SimulationCanvas } from './components/SimulationCanvas'
 import { StatsPanel } from './components/StatsPanel'
 import { CreatureInspector } from './components/CreatureInspector'
@@ -27,6 +28,7 @@ import { LineageTracker } from './sim/lineage/lineageTracker'
 import { PlantSpeciesTracker } from './sim/plantLineage/plantSpeciesTracker'
 import { PathogenStrainTracker } from './sim/pathogenLineage/pathogenStrainTracker'
 import { loadSimSettings, saveSimSettings } from './sim/settingsStorage'
+import { creatureToSavedGenome, type SavedGenome } from './sim/dnaExport'
 import {
   cloneSettings,
   settingsRunKey,
@@ -42,6 +44,8 @@ function App() {
   const [runId, setRunId] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [hallOpen, setHallOpen] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [editorGenome, setEditorGenome] = useState<SavedGenome | null>(null)
   const [draftSettings, setDraftSettings] = useState(loadSimSettings)
   const [activeSettings, setActiveSettings] = useState(loadSimSettings)
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null)
@@ -157,6 +161,10 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Escape' && editorOpen) {
+        setEditorOpen(false)
+        return
+      }
       if (event.code === 'Escape' && hallOpen) {
         setHallOpen(false)
         return
@@ -174,7 +182,7 @@ function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen, hallOpen])
+  }, [settingsOpen, hallOpen, editorOpen])
 
   const selectedCreature =
     snapshot?.creatures.find((creature) => creature.id === selectedId) ?? null
@@ -219,10 +227,18 @@ function App() {
           onReseed={() => handleStart(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenHall={() => setHallOpen(true)}
+          onOpenEditor={() => {
+            setEditorGenome(null)
+            setEditorOpen(true)
+          }}
         />
         <CreatureInspector
           creature={selectedCreature}
           onClose={() => setSelectedId(null)}
+          onEditInDesigner={(creature) => {
+            setEditorGenome(creatureToSavedGenome(creature))
+            setEditorOpen(true)
+          }}
         />
       </aside>
       <SimulationCanvas
@@ -236,6 +252,11 @@ function App() {
         onSelectCreature={setSelectedId}
       />
       <ChampionHallModal open={hallOpen} onClose={() => setHallOpen(false)} />
+      <CreatureEditorModal
+        open={editorOpen}
+        initialGenome={editorGenome}
+        onClose={() => setEditorOpen(false)}
+      />
       <SettingsModal
         open={settingsOpen}
         draft={draftSettings}

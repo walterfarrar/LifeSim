@@ -25,6 +25,7 @@ type StatsPanelProps = {
   onReseed: () => void
   onOpenSettings: () => void
   onOpenHall: () => void
+  onOpenEditor: () => void
 }
 
 export function StatsPanel({
@@ -46,6 +47,7 @@ export function StatsPanel({
   onReseed,
   onOpenSettings,
   onOpenHall,
+  onOpenEditor,
 }: StatsPanelProps) {
   return (
     <div className="stats-panel">
@@ -159,6 +161,14 @@ export function StatsPanel({
             Faster
           </button>
         </div>
+        <button
+          type="button"
+          className="creature-editor-button"
+          onClick={onOpenEditor}
+          title="Design creature DNA and save to your library"
+        >
+          Creature editor
+        </button>
         <button
           type="button"
           className="champion-button"

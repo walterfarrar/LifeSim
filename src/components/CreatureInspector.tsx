@@ -18,13 +18,14 @@ import { useState } from 'react'
 type CreatureInspectorProps = {
   creature: Creature | null
   onClose: () => void
+  onEditInDesigner?: (creature: Creature) => void
 }
 
 function fmt(value: number, digits = 1): string {
   return value.toFixed(digits)
 }
 
-export function CreatureInspector({ creature, onClose }: CreatureInspectorProps) {
+export function CreatureInspector({ creature, onClose, onEditInDesigner }: CreatureInspectorProps) {
   const [saveName, setSaveName] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [library, setLibrary] = useState<SavedGenome[]>(() => loadSavedGenomeLibrary())
@@ -164,6 +165,15 @@ export function CreatureInspector({ creature, onClose }: CreatureInspectorProps)
         <p className="hint">
           Saves a snapshot of this genome only — your creature keeps running in the sim.
         </p>
+        {onEditInDesigner && (
+          <button
+            type="button"
+            className="settings-primary creature-inspector-edit"
+            onClick={() => onEditInDesigner(creature)}
+          >
+            Open in creature editor
+          </button>
+        )}
         <label className="dna-save-field">
           <span>Name</span>
           <input
