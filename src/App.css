@@ -539,6 +539,12 @@ button:hover {
   font-variant-numeric: tabular-nums;
 }
 
+.max-time-reached {
+  font-size: 0.85rem;
+  color: #7d9684;
+  font-weight: 400;
+}
+
 .controls {
   display: flex;
   flex-wrap: wrap;

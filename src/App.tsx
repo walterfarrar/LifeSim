@@ -45,6 +45,7 @@ function App() {
   const [draftSettings, setDraftSettings] = useState(loadSimSettings)
   const [activeSettings, setActiveSettings] = useState(loadSimSettings)
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null)
+  const [maxTickReached, setMaxTickReached] = useState(0)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [autoChampion, setAutoChampion] = useState<AutoChampionRecord | null>(() => loadAutoChampionRecord())
   const [autoPlantChampion, setAutoPlantChampion] = useState<AutoPlantChampionRecord | null>(() =>
@@ -59,6 +60,7 @@ function App() {
 
   const onSnapshot = useCallback((next: WorldSnapshot) => {
     setSnapshot(next)
+    setMaxTickReached((prev) => Math.max(prev, next.stats.tick))
   }, [])
 
   const canvasKey = useMemo(
@@ -88,6 +90,7 @@ function App() {
     }
     setRunId((id) => id + 1)
     setSelectedId(null)
+    setMaxTickReached(0)
     setPaused(false)
     setSettingsOpen(false)
   }, [draftSettings])
@@ -196,6 +199,7 @@ function App() {
       <aside className="sidebar">
         <StatsPanel
           stats={stats}
+          maxTickReached={maxTickReached}
           paused={paused}
           settings={activeSettings}
           seed={seed}

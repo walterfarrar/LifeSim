@@ -8,6 +8,7 @@ import { totalStartingHerbivores } from '../sim/simSettings'
 
 type StatsPanelProps = {
   stats: WorldStats
+  maxTickReached: number
   paused: boolean
   settings: SimSettings
   seed: number
@@ -28,6 +29,7 @@ type StatsPanelProps = {
 
 export function StatsPanel({
   stats,
+  maxTickReached,
   paused,
   settings,
   seed,
@@ -70,7 +72,13 @@ export function StatsPanel({
       <dl className="stats-grid">
         <div>
           <dt>Time</dt>
-          <dd>{formatYears(stats.tick)}</dd>
+          <dd>
+            {formatYears(stats.tick)}
+            <span className="max-time-reached" title="Longest this attempt has run">
+              {' '}
+              · max {formatYears(maxTickReached)}
+            </span>
+          </dd>
         </div>
         <div>
           <dt>Total energy</dt>
