@@ -271,7 +271,13 @@ export function SimulationCanvas({
       : null
 
   return (
-    <div className="canvas-wrap">
+    <div
+      className="canvas-wrap"
+      style={{
+        aspectRatio: `${settings.worldWidth} / ${settings.worldHeight}`,
+        ['--map-aspect' as string]: String(settings.worldWidth / settings.worldHeight),
+      }}
+    >
       {paused && <div className="paused-badge">Paused</div>}
       <VisualLegend />
       <div className="zoom-controls" aria-label="Map zoom">

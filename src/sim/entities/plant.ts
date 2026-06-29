@@ -4,7 +4,7 @@ import { createRandomPlantDNA, normalizePlantBudget } from '../plantBudget'
 import { expressPlant } from '../phenotype'
 import type { Rng } from '../rng'
 import type { Plant, Vec2 } from '../types'
-import { WORLD_HEIGHT, WORLD_WIDTH } from '../config'
+import { getWorldBounds } from '../worldBounds'
 
 let nextPlantId = 1
 
@@ -14,6 +14,10 @@ export function resetPlantIds(): void {
 
 export function plantTraits(plant: Plant) {
   return expressPlant(plant.dna)
+}
+
+function plantMargin(bounds = getWorldBounds()): number {
+  return Math.min(40, Math.max(20, Math.min(bounds.width, bounds.height) * 0.02))
 }
 
 function startingEnergy(rng: Rng, maxEnergy: number): number {
@@ -48,12 +52,14 @@ function buildPlant(
   position?: Vec2,
   initialEnergy?: number,
 ): Plant {
+  const bounds = getWorldBounds()
+  const margin = plantMargin(bounds)
   const traits = expressPlant(dna)
   return {
     kind: 'plant',
     id: nextPlantId++,
-    x: position?.x ?? rng.range(20, WORLD_WIDTH - 20),
-    y: position?.y ?? rng.range(20, WORLD_HEIGHT - 20),
+    x: position?.x ?? rng.range(margin, bounds.width - margin),
+    y: position?.y ?? rng.range(margin, bounds.height - margin),
     dna,
     energy: initialEnergy ?? startingEnergy(rng, traits.maxEnergy),
     age: 0,
@@ -75,6 +81,8 @@ export function plantSpreadRange(parent: Plant): { min: number; max: number } {
 
 /** Spawn a new plant within spread distance of an existing one. */
 export function createPlantNear(rng: Rng, parent: Plant, initialEnergy?: number): Plant {
+  const bounds = getWorldBounds()
+  const margin = plantMargin(bounds)
   const spawn = (position: Vec2) =>
     createPlant(rng, position, parent.dna, initialEnergy)
 
@@ -84,15 +92,15 @@ export function createPlantNear(rng: Rng, parent: Plant, initialEnergy?: number)
     const dist = rng.range(min, max)
     const x = parent.x + Math.cos(angle) * dist
     const y = parent.y + Math.sin(angle) * dist
-    if (x >= 20 && x <= WORLD_WIDTH - 20 && y >= 20 && y <= WORLD_HEIGHT - 20) {
+    if (x >= margin && x <= bounds.width - margin && y >= margin && y <= bounds.height - margin) {
       return spawn({ x, y })
     }
   }
 
   const angle = rng.range(0, Math.PI * 2)
   const dist = rng.range(min, max)
-  const x = clamp(parent.x + Math.cos(angle) * dist, 20, WORLD_WIDTH - 20)
-  const y = clamp(parent.y + Math.sin(angle) * dist, 20, WORLD_HEIGHT - 20)
+  const x = clamp(parent.x + Math.cos(angle) * dist, margin, bounds.width - margin)
+  const y = clamp(parent.y + Math.sin(angle) * dist, margin, bounds.height - margin)
   return spawn({ x, y })
 }
 

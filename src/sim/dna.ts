@@ -1,8 +1,8 @@
 import { HERBIVORE_GENE_COUNT, HerbivoreGene } from './genes'
 import type { Rng } from './rng'
 import type { FounderSettings } from './simSettings'
-import { WORLD_HEIGHT, WORLD_WIDTH } from './config'
 import type { Vec2 } from './types'
+import { getWorldBounds } from './worldBounds'
 
 /** Fixed-length byte genome; each allele is 0–255. */
 export type DNA = Uint8Array
@@ -101,6 +101,9 @@ export function createMultiGroupPopulation(
   const cols = Math.ceil(Math.sqrt(groupCount))
   const rows = Math.ceil(groupCount / cols)
 
+  const bounds = getWorldBounds()
+  const groupSpread = Math.min(75, Math.max(40, Math.min(bounds.width, bounds.height) * 0.04))
+
   for (let group = 0; group < groupCount; group++) {
     const savedFounder = groupFounderDna?.[group]
     const founder = savedFounder ? cloneDNA(savedFounder) : createFounderGroupDNA(rng, group, groupCount)
@@ -109,8 +112,8 @@ export function createMultiGroupPopulation(
     }
     const row = Math.floor(group / cols)
     const col = group % cols
-    const centerX = (WORLD_WIDTH / (cols + 1)) * (col + 1)
-    const centerY = (WORLD_HEIGHT / (rows + 1)) * (row + 1)
+    const centerX = (bounds.width / (cols + 1)) * (col + 1)
+    const centerY = (bounds.height / (rows + 1)) * (row + 1)
 
     for (let i = 0; i < herbivoresPerGroup; i++) {
       const dna = i === 0 ? cloneDNA(founder) : createFounderVariantDNA(rng, founder, founderSettings)
@@ -121,8 +124,8 @@ export function createMultiGroupPopulation(
       spawns.push({
         dna,
         position: {
-          x: centerX + rng.range(-75, 75),
-          y: centerY + rng.range(-75, 75),
+          x: centerX + rng.range(-groupSpread, groupSpread),
+          y: centerY + rng.range(-groupSpread, groupSpread),
         },
       })
     }

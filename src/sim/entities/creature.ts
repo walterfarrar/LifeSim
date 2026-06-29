@@ -5,8 +5,8 @@ import { computeInbreedingLoad } from '../inbreeding'
 import type { Rng } from '../rng'
 import { toroidalDelta, toroidalDistance } from '../toroidal'
 import type { Creature, Plant, Vec2 } from '../types'
+import { getWorldBounds } from '../worldBounds'
 import { plantTraits } from './plant'
-import { WORLD_HEIGHT, WORLD_WIDTH } from '../config'
 
 export { toroidalDelta, toroidalDistance } from '../toroidal'
 
@@ -17,6 +17,8 @@ export function resetCreatureIds(): void {
 }
 
 export function createHerbivore(rng: Rng, position?: Vec2, dna = createRandomDNA(rng)): Creature {
+  const bounds = getWorldBounds()
+  const margin = Math.min(75, Math.max(40, Math.min(bounds.width, bounds.height) * 0.04))
   const traits = expressCreatureTraits(dna, 0)
   return {
     kind: 'creature',
@@ -26,8 +28,8 @@ export function createHerbivore(rng: Rng, position?: Vec2, dna = createRandomDNA
     mode: 'hungry',
     fatigue: 0,
     modeTicksInCurrent: 0,
-    x: position?.x ?? rng.range(40, WORLD_WIDTH - 40),
-    y: position?.y ?? rng.range(40, WORLD_HEIGHT - 40),
+    x: position?.x ?? rng.range(margin, bounds.width - margin),
+    y: position?.y ?? rng.range(margin, bounds.height - margin),
     vx: 0,
     vy: 0,
     energy: Math.min(
@@ -39,8 +41,8 @@ export function createHerbivore(rng: Rng, position?: Vec2, dna = createRandomDNA
     reproductionCooldown: 0,
     pregnancyTicksRemaining: 0,
     pendingBirthEnergy: 0,
-    wanderX: rng.range(40, WORLD_WIDTH - 40),
-    wanderY: rng.range(40, WORLD_HEIGHT - 40),
+    wanderX: rng.range(margin, bounds.width - margin),
+    wanderY: rng.range(margin, bounds.height - margin),
     wanderTicksRemaining: rng.int(traits.wanderDurationMin, traits.wanderDurationMin + traits.wanderDurationSpan),
     attackCooldown: 0,
     inbreedingLoad: 0,
@@ -72,8 +74,9 @@ export function moveToward(creature: Creature, target: Vec2, traits = creatureTr
 }
 
 export function applyMovement(creature: Creature): void {
-  creature.x = wrap(creature.x + creature.vx, WORLD_WIDTH)
-  creature.y = wrap(creature.y + creature.vy, WORLD_HEIGHT)
+  const bounds = getWorldBounds()
+  creature.x = wrap(creature.x + creature.vx, bounds.width)
+  creature.y = wrap(creature.y + creature.vy, bounds.height)
 }
 
 export function applyMetabolism(creature: Creature): void {

@@ -1,4 +1,4 @@
-import { WORLD_HEIGHT, WORLD_WIDTH } from './config'
+import { getWorldBounds } from './worldBounds'
 import type { Vec2 } from './types'
 
 /** Offsets for drawing a toroidal world — duplicate near edges so vision/entities wrap visually. */
@@ -6,8 +6,8 @@ export function toroidalDisplayOffsets(
   x: number,
   y: number,
   margin: number,
-  worldWidth = WORLD_WIDTH,
-  worldHeight = WORLD_HEIGHT,
+  worldWidth = getWorldBounds().width,
+  worldHeight = getWorldBounds().height,
 ): Array<{ ox: number; oy: number }> {
   const offsets: Array<{ ox: number; oy: number }> = [{ ox: 0, oy: 0 }]
   const nearLeft = x < margin
@@ -27,13 +27,13 @@ export function toroidalDisplayOffsets(
   return offsets
 }
 
-export function toroidalDelta(from: Vec2, to: Vec2): { dx: number; dy: number } {
+export function toroidalDelta(from: Vec2, to: Vec2, bounds = getWorldBounds()): { dx: number; dy: number } {
   let dx = to.x - from.x
   let dy = to.y - from.y
-  if (dx > WORLD_WIDTH / 2) dx -= WORLD_WIDTH
-  if (dx < -WORLD_WIDTH / 2) dx += WORLD_WIDTH
-  if (dy > WORLD_HEIGHT / 2) dy -= WORLD_HEIGHT
-  if (dy < -WORLD_HEIGHT / 2) dy += WORLD_HEIGHT
+  if (dx > bounds.width / 2) dx -= bounds.width
+  if (dx < -bounds.width / 2) dx += bounds.width
+  if (dy > bounds.height / 2) dy -= bounds.height
+  if (dy < -bounds.height / 2) dy += bounds.height
   return { dx, dy }
 }
 

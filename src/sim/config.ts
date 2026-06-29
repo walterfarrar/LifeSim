@@ -1,6 +1,15 @@
 /** World and simulation tuning — adjust here as the sim grows. */
-export const WORLD_WIDTH = 2200
-export const WORLD_HEIGHT = 1500
+export const DEFAULT_WORLD_WIDTH = 2200
+export const DEFAULT_WORLD_HEIGHT = 1500
+export const MIN_WORLD_WIDTH = 800
+export const MAX_WORLD_WIDTH = 4000
+export const MIN_WORLD_HEIGHT = 600
+export const MAX_WORLD_HEIGHT = 3000
+
+/** @deprecated Use settings.worldWidth or getWorldBounds().width */
+export const WORLD_WIDTH = DEFAULT_WORLD_WIDTH
+/** @deprecated Use settings.worldHeight or getWorldBounds().height */
+export const WORLD_HEIGHT = DEFAULT_WORLD_HEIGHT
 
 export const TICKS_PER_SECOND = 30
 

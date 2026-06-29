@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
 import {
+  MAX_WORLD_HEIGHT,
+  MAX_WORLD_WIDTH,
+  MIN_WORLD_HEIGHT,
+  MIN_WORLD_WIDTH,
+} from '../sim/config'
+import {
   AUTO_CHAMPION_GENOME_ID,
   type AutoChampionRecord,
 } from '../sim/autoChampion'
@@ -127,8 +133,9 @@ export function SettingsModal({
           <div>
             <h2 id="settings-modal-title">Simulation settings</h2>
             <p className="settings-subtitle">
-              {draft.creatureGroups} group{draft.creatureGroups === 1 ? '' : 's'} · {totalHerbivores}{' '}
-              creatures · {draft.initialPlants} plants
+              {draft.worldWidth}×{draft.worldHeight} map · {draft.creatureGroups} group
+              {draft.creatureGroups === 1 ? '' : 's'} · {totalHerbivores} creatures ·{' '}
+              {draft.initialPlants} plants
               {selectedChampions.length > 0 &&
                 ` · ${selectedChampions.length} saved champion${selectedChampions.length === 1 ? '' : 's'}`}
             </p>
@@ -139,6 +146,30 @@ export function SettingsModal({
         </header>
 
         <div className="settings-modal-body">
+          <details open className="settings-group">
+            <summary>Map</summary>
+            <div className="settings-fields">
+              <NumberField
+                label="Map width"
+                hint="Simulation world width in pixels"
+                value={draft.worldWidth}
+                min={MIN_WORLD_WIDTH}
+                max={MAX_WORLD_WIDTH}
+                step={100}
+                onChange={(worldWidth) => onChange(patch(draft, { worldWidth }))}
+              />
+              <NumberField
+                label="Map height"
+                hint="Simulation world height in pixels"
+                value={draft.worldHeight}
+                min={MIN_WORLD_HEIGHT}
+                max={MAX_WORLD_HEIGHT}
+                step={100}
+                onChange={(worldHeight) => onChange(patch(draft, { worldHeight }))}
+              />
+            </div>
+          </details>
+
           <details open className="settings-group">
             <summary>Population</summary>
             <div className="settings-fields">

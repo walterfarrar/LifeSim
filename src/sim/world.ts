@@ -1,7 +1,3 @@
-import {
-  WORLD_HEIGHT,
-  WORLD_WIDTH,
-} from './config'
 import { createMultiGroupPopulation } from './dna'
 import {
   createInitialPathogens,
@@ -17,6 +13,11 @@ import {
   DEFAULT_SIM_SETTINGS,
   type SimSettings,
 } from './simSettings'
+import {
+  setActiveWorldBounds,
+  worldBoundsFromSettings,
+  type WorldBounds,
+} from './worldBounds'
 import {
   applyMetabolism,
   applyMovement,
@@ -85,6 +86,7 @@ export class World {
   private pathogens: Pathogen[] = []
   private rng: Rng
   private settings: SimSettings
+  private bounds: WorldBounds
   private stats: WorldStats = {
     tick: 0,
     plantCount: 0,
@@ -101,6 +103,8 @@ export class World {
 
   constructor(seed?: number, settings: SimSettings = DEFAULT_SIM_SETTINGS) {
     this.settings = { ...settings }
+    this.bounds = worldBoundsFromSettings(this.settings)
+    setActiveWorldBounds(this.bounds)
     this.rng = new Rng(seed)
     this.reset()
   }
@@ -112,6 +116,8 @@ export class World {
     if (settings) {
       this.settings = { ...settings }
     }
+    this.bounds = worldBoundsFromSettings(this.settings)
+    setActiveWorldBounds(this.bounds)
     resetPlantIds()
     resetCorpseIds()
     resetCreatureIds()
@@ -202,11 +208,11 @@ export class World {
   }
 
   get width(): number {
-    return WORLD_WIDTH
+    return this.bounds.width
   }
 
   get height(): number {
-    return WORLD_HEIGHT
+    return this.bounds.height
   }
 
   private spawnPlants(): void {
@@ -470,12 +476,13 @@ export class World {
 
   private pickWanderGoal(creature: Creature): { x: number; y: number } {
     const traits = creatureTraits(creature)
+    const margin = Math.min(75, Math.max(40, Math.min(this.bounds.width, this.bounds.height) * 0.04))
     if (creature.wanderTicksRemaining > 0) {
       creature.wanderTicksRemaining -= 1
       return { x: creature.wanderX, y: creature.wanderY }
     }
-    creature.wanderX = this.rng.range(40, WORLD_WIDTH - 40)
-    creature.wanderY = this.rng.range(40, WORLD_HEIGHT - 40)
+    creature.wanderX = this.rng.range(margin, this.bounds.width - margin)
+    creature.wanderY = this.rng.range(margin, this.bounds.height - margin)
     creature.wanderTicksRemaining =
       traits.wanderDurationMin + this.rng.int(0, traits.wanderDurationSpan)
     return { x: creature.wanderX, y: creature.wanderY }

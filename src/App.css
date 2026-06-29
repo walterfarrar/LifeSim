@@ -1025,8 +1025,8 @@ button:hover {
     width: 100%;
     min-height: 0;
     max-height: none;
-    aspect-ratio: 22 / 15;
-    height: min(calc(100vw * 15 / 22), calc(100dvh - 11.5rem));
+    /* aspect-ratio set inline from settings.worldWidth / worldHeight */
+    height: min(calc(100vw / var(--map-aspect, 1.466)), calc(100dvh - 11.5rem));
   }
 
   .canvas-viewport {

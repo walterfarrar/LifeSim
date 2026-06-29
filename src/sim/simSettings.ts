@@ -1,4 +1,6 @@
 import {
+  DEFAULT_WORLD_HEIGHT,
+  DEFAULT_WORLD_WIDTH,
   FOUNDER_GENE_JITTER_CHANCE,
   FOUNDER_GENE_SPREAD,
   FOUNDER_PREFERENCE_NOISE,
@@ -14,6 +16,8 @@ import {
 export const MAX_CREATURE_GROUPS = 8
 
 export type SimSettings = {
+  worldWidth: number
+  worldHeight: number
   creatureGroups: number
   herbivoresPerGroup: number
   initialPlants: number
@@ -44,6 +48,8 @@ export type FounderSettings = Pick<
 >
 
 export const DEFAULT_SIM_SETTINGS: SimSettings = {
+  worldWidth: DEFAULT_WORLD_WIDTH,
+  worldHeight: DEFAULT_WORLD_HEIGHT,
   creatureGroups: 3,
   herbivoresPerGroup: Math.max(4, Math.floor(INITIAL_HERBIVORES / 3)),
   initialPlants: INITIAL_PLANTS,

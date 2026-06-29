@@ -1,5 +1,9 @@
 import { validFounderGenomeIds } from './founderGenomes'
 import {
+  clampWorldHeight,
+  clampWorldWidth,
+} from './worldBounds'
+import {
   cloneSettings,
   DEFAULT_SIM_SETTINGS,
   MAX_CREATURE_GROUPS,
@@ -24,6 +28,8 @@ function sanitizeSettings(raw: Partial<SimSettings>): SimSettings {
   const base = DEFAULT_SIM_SETTINGS
   const validGenomeIds = validFounderGenomeIds()
   return {
+    worldWidth: clampWorldWidth(Number(raw.worldWidth ?? base.worldWidth)),
+    worldHeight: clampWorldHeight(Number(raw.worldHeight ?? base.worldHeight)),
     creatureGroups: clamp(Math.round(raw.creatureGroups ?? base.creatureGroups), 1, 8),
     herbivoresPerGroup: clamp(Math.round(raw.herbivoresPerGroup ?? base.herbivoresPerGroup), 2, 80),
     initialPlants: clamp(Math.round(raw.initialPlants ?? base.initialPlants), 0, 2000),
