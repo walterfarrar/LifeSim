@@ -141,8 +141,8 @@ export const RAIN_POND_FRACTION = 0.48
 /** Fraction of plant biomass energy stored as retrievable tissue water. */
 export const PLANT_WATER_PER_ENERGY = 0.26
 /** Water released to soil vs air when a creature or plant dies. */
-export const DEATH_WATER_TO_SOIL = 0.55
-export const DEATH_WATER_TO_AIR = 0.45
+export const DEATH_WATER_TO_SOIL = 0.1
+export const DEATH_WATER_TO_AIR = 0.9
 
 /** Water transferred from pond to nearby soil per tick (moisture-fraction units). */
 export const POND_SEEP_RATE = 0.22
