@@ -33,7 +33,6 @@ import { creatureToSavedGenome, type SavedGenome } from './sim/dnaExport'
 import {
   cloneSettings,
   settingsRunKey,
-  totalStartingHerbivores,
 } from './sim/simSettings'
 import type { WorldSnapshot } from './sim/types'
 import { clampSpeedMultiplier } from './sim/timeScale'
@@ -150,17 +149,6 @@ function App() {
     const stillAlive = snapshot?.creatures.some((creature) => creature.id === selectedId)
     if (snapshot && !stillAlive) setSelectedId(null)
   }, [snapshot, selectedId])
-
-  useEffect(() => {
-    if (!snapshot) return
-    if (totalStartingHerbivores(activeSettings) === 0) return
-    if (snapshot.stats.herbivoreCount > 0) return
-    if (snapshot.stats.tick === 0) return
-
-    setSeed(Date.now())
-    setRunId((id) => id + 1)
-    setSelectedId(null)
-  }, [snapshot, activeSettings])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

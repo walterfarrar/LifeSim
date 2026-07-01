@@ -21,8 +21,10 @@ export const MAX_BUSH_PLANTS = 200
 export const MAX_TREE_PLANTS = 200
 export const MIN_PLANT_KIND_CAP = 0
 export const MAX_PLANT_KIND_CAP = 4000
-/** Rare wind-borne seed when the map has zero plants (simulation constant, not a setting). */
-export const PLANT_EXTINCT_WIND_RESEED_CHANCE = 0.15
+/** Rare wind-borne seed when a plant lineage is extinct (simulation constant). */
+export const PLANT_KIND_EXTINCT_RESEED_CHANCE = 0.1
+/** Wind-borne seed when every plant on the map is gone. */
+export const PLANT_EXTINCT_WIND_RESEED_CHANCE = 0.22
 
 export const REFERENCE_WORLD_AREA = DEFAULT_WORLD_WIDTH * DEFAULT_WORLD_HEIGHT
 
@@ -96,6 +98,10 @@ export const SOIL_CELL_WATER_CAPACITY = 48
 export const SOIL_BASELINE_MOISTURE = 0.28
 /** Base moisture-fraction evaporation per cell per tick at reference temp/humidity. */
 export const SOIL_EVAP_BASE = 0.00015
+/** Average soil moisture above which evaporation ramps up to prevent a permanent marsh. */
+export const SOIL_SATURATED_MOISTURE = 0.82
+/** Extra evaporation multiplier at full saturation (scaled from SOIL_SATURATED_MOISTURE). */
+export const SOIL_SATURATED_EVAP_BOOST = 7
 /** Michaelis half-saturation for growth scaling (lower = thirstier plants). */
 export const SOIL_MOISTURE_HALF_SAT = 0.14
 /** Minimum local moisture to attempt plant reproduction. */

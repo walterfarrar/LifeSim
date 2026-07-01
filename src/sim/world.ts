@@ -9,10 +9,11 @@ import { tickDiseaseSystem } from './disease/diseaseSystem'
 import { resolveGroupFounderDnas } from './founderGenomes'
 import { resolvePlantChampionDna } from './plantFounderGenomes'
 import { allPlantKinds, createPlantKindDna, countPlantsByKind, plantKindFromDna } from './plantKinds'
-import { allPlantKindsAtCap, isPlantKindAtCap } from './plantLimits'
+import { allPlantKindsAtCap, isPlantKindAtCap, maxPlantsForKind } from './plantLimits'
 import { resolvePathogenChampionDna } from './pathogenFounderGenomes'
 import {
   DEFAULT_SIM_SETTINGS,
+  totalStartingHerbivores,
   type SimSettings,
 } from './simSettings'
 import {
@@ -111,7 +112,12 @@ import {
   energyFromPreyBiomass,
   sumEntityEnergy,
 } from './energyEconomy'
-import { PLANT_EXTINCT_WIND_RESEED_CHANCE, SOIL_REPRO_MIN_MOISTURE } from './config'
+import type { PlantKind } from './plantKinds'
+import {
+  PLANT_EXTINCT_WIND_RESEED_CHANCE,
+  PLANT_KIND_EXTINCT_RESEED_CHANCE,
+  SOIL_REPRO_MIN_MOISTURE,
+} from './config'
 import { classifyDeathCause, createEmptyDeathCauseCounts } from './deathCause'
 import {
   dayLengthTicks,
@@ -274,23 +280,12 @@ export class World {
       }
     }
 
-    const founderSettings = {
-      founderGeneSpread: this.settings.founderGeneSpread,
-      founderJitterChance: this.settings.founderJitterChance,
-    }
     const groupFounderDna = resolveGroupFounderDnas(
       this.settings.creatureGroups,
       this.settings.groupFounders,
     )
-    for (const spawn of createMultiGroupPopulation(
-      this.rng,
-      this.settings.creatureGroups,
-      this.settings.herbivoresPerGroup,
-      founderSettings,
-      groupFounderDna,
-    )) {
-      this.creatures.push(createHerbivore(this.rng, spawn.position, spawn.dna))
-    }
+    const starters = this.spawnStartingCreatures(groupFounderDna)
+    this.creatures.push(...starters)
     for (const plant of this.plants) {
       absorbPlantWaterFromSoil(plant, this.soil)
     }
@@ -358,6 +353,7 @@ export class World {
     this.applyPondDrowning()
     tickDiseaseSystem(this.creatures, this.pathogens, this.rng, this.stats.tick, this.settings)
     this.cullDead()
+    this.maybeRespawnCreatures()
     this.refreshStats()
   }
 
@@ -381,22 +377,69 @@ export class World {
     return this.bounds.height
   }
 
+  private spawnStartingCreatures(groupFounderDna: ReturnType<typeof resolveGroupFounderDnas>): Creature[] {
+    const founderSettings = {
+      founderGeneSpread: this.settings.founderGeneSpread,
+      founderJitterChance: this.settings.founderJitterChance,
+    }
+    const spawned: Creature[] = []
+    for (const spawn of createMultiGroupPopulation(
+      this.rng,
+      this.settings.creatureGroups,
+      this.settings.herbivoresPerGroup,
+      founderSettings,
+      groupFounderDna,
+    )) {
+      spawned.push(createHerbivore(this.rng, spawn.position, spawn.dna))
+    }
+    return spawned
+  }
+
+  /** Reintroduce herbivores when the population dies out — world state otherwise unchanged. */
+  private maybeRespawnCreatures(): void {
+    if (totalStartingHerbivores(this.settings) === 0) return
+    if (this.creatures.length > 0) return
+    if (this.stats.tick === 0) return
+
+    const groupFounderDna = resolveGroupFounderDnas(
+      this.settings.creatureGroups,
+      this.settings.groupFounders,
+    )
+    const newcomers = this.spawnStartingCreatures(groupFounderDna)
+    if (newcomers.length === 0) return
+
+    fundInitialCreatureHydration(newcomers, this.ponds, this.atmosphere)
+    this.creatures.push(...newcomers)
+    this.stats.births += newcomers.length
+  }
+
+  /** Wind-borne seeds for any lineage that has died out locally. */
+  private reseedExtinctPlantKinds(kindCounts: Record<PlantKind, number>): void {
+    const totalExtinction = this.plants.length === 0
+
+    for (const kind of allPlantKinds()) {
+      if (kindCounts[kind] > 0) continue
+      if (maxPlantsForKind(this.settings, kind) <= 0) continue
+      if (isPlantKindAtCap(this.settings, kindCounts, kind)) continue
+
+      const chance = totalExtinction ? PLANT_EXTINCT_WIND_RESEED_CHANCE : PLANT_KIND_EXTINCT_RESEED_CHANCE
+      if (!this.rng.chance(chance)) continue
+
+      const plant = createPlantWithDna(this.rng, createPlantKindDna(kind, this.rng))
+      absorbPlantWaterFromSoil(plant, this.soil)
+      this.plants.push(plant)
+      kindCounts[kind] += 1
+      this.primaryProductionThisTick += plant.energy
+    }
+  }
+
   private spawnPlants(): void {
     const kindCounts = countPlantsByKind(this.plants)
 
     if (allPlantKindsAtCap(this.settings, kindCounts)) return
 
-    if (this.plants.length === 0) {
-      if (this.rng.chance(PLANT_EXTINCT_WIND_RESEED_CHANCE)) {
-        const plant = createPlant(this.rng)
-        const kind = plantKindFromDna(plant.dna)
-        if (isPlantKindAtCap(this.settings, kindCounts, kind)) return
-        absorbPlantWaterFromSoil(plant, this.soil)
-        this.plants.push(plant)
-        this.primaryProductionThisTick += plant.energy
-      }
-      return
-    }
+    this.reseedExtinctPlantKinds(kindCounts)
+    if (this.plants.length === 0) return
 
     const attempts = plantPopulationSpawnAttempts(this.plants, this.stats.season)
 

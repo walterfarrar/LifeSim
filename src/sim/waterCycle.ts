@@ -17,6 +17,8 @@ import {
   REFERENCE_WORLD_AREA,
   SOIL_CELL_WATER_CAPACITY,
   SOIL_EVAP_BASE,
+  SOIL_SATURATED_EVAP_BOOST,
+  SOIL_SATURATED_MOISTURE,
 } from './config'
 import type { Creature, Plant, Pond } from './types'
 import type { SoilMoisture } from './soilMoisture'
@@ -125,7 +127,12 @@ export function evaporateSoilToAir(
 ): void {
   if (atmosphere.raining) return
   const evapMult = surfaceEvaporationRate(tempC, atmosphere.humidity, false)
-  const baseRate = SOIL_EVAP_BASE * SOIL_CELL_WATER_CAPACITY * evapMult
+  const avgMoisture = soil.averageMoisture()
+  let swampMult = 1
+  if (avgMoisture > SOIL_SATURATED_MOISTURE) {
+    swampMult = 1 + (avgMoisture - SOIL_SATURATED_MOISTURE) * SOIL_SATURATED_EVAP_BOOST
+  }
+  const baseRate = SOIL_EVAP_BASE * SOIL_CELL_WATER_CAPACITY * evapMult * swampMult
   atmosphere.vapor += soil.evaporateToAtmosphere(baseRate)
 }
 
