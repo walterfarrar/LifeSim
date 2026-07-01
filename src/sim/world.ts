@@ -8,6 +8,8 @@ import {
 import { tickDiseaseSystem } from './disease/diseaseSystem'
 import { resolveGroupFounderDnas } from './founderGenomes'
 import { resolvePlantChampionDna } from './plantFounderGenomes'
+import { allPlantKinds, createPlantKindDna, countPlantsByKind, plantKindFromDna } from './plantKinds'
+import { allPlantKindsAtCap, isPlantKindAtCap } from './plantLimits'
 import { resolvePathogenChampionDna } from './pathogenFounderGenomes'
 import {
   DEFAULT_SIM_SETTINGS,
@@ -23,6 +25,7 @@ import {
   applyMovement,
   canSeekMate,
   capEnergy,
+  capHydration,
   createHerbivore,
   creatureTraits,
   isAlive,
@@ -30,6 +33,7 @@ import {
   mateProximity,
   moveToward,
   needsFood,
+  needsWater,
   resetCreatureIds,
   tickPregnancy,
   toroidalDistance,
@@ -44,18 +48,34 @@ import {
   resetCorpseIds,
 } from './entities/corpse'
 import {
-  bitePlant,
+  foragePlantBite,
   createPlant,
   createPlantNear,
   createPlantWithDna,
   growPlant,
+  applyPlantTemperature,
+  applyPlantAging,
+  applyPlantOldAge,
+  applyPlantDrought,
   isPlantEdible,
+  absorbPlantWaterFromSoil,
+  transferPlantSeedWater,
   plantPopulationSpawnAttempts,
+  plantRadius,
   plantReproductionChance,
   pickPlantForReproduction,
   plantTraits,
   resetPlantIds,
 } from './entities/plant'
+import {
+  createPond,
+  isPondDrinkable,
+  applyCreatureDrowning,
+  applyPlantDrowning,
+  pondApproachTarget,
+  resetPondIds,
+  tryDrinkFromPond,
+} from './entities/pond'
 import {
   isMateSearchTarget,
   mateAcceptanceThreshold,
@@ -65,6 +85,17 @@ import {
 import { applySpaceReaction, evaluateSpaceReaction } from './spaceBehavior'
 import { findCohesionTarget } from './cohesion'
 import { findBestPlantTarget } from './foraging'
+import {
+  findBestPondTarget,
+  findBestPlantWaterTarget,
+  plantWaterScore,
+  pondWaterScore,
+} from './hydration'
+import {
+  bestMemoryGoal,
+  decayCreatureMemories,
+  recordCreatureMemory,
+} from './creatureMemory'
 import { CreatureGrid } from './spatialGrid'
 import {
   attemptPredation,
@@ -77,19 +108,39 @@ import {
 } from './predation'
 import {
   energyFromCorpseBiomass,
-  energyFromPlantBiomass,
   energyFromPreyBiomass,
   sumEntityEnergy,
 } from './energyEconomy'
-import { PLANT_EXTINCT_WIND_RESEED_CHANCE } from './config'
-import { countPlantsByKind } from './plantKinds'
+import { PLANT_EXTINCT_WIND_RESEED_CHANCE, SOIL_REPRO_MIN_MOISTURE } from './config'
+import { classifyDeathCause, createEmptyDeathCauseCounts } from './deathCause'
+import {
+  dayLengthTicks,
+  dayPhaseAtTick,
+  isNightSunlight,
+  sunlightFactor,
+} from './dayNight'
+import { computeSeasonSnapshot } from './seasons'
+import { ambientTemperatureC } from './temperature'
+import { SoilMoisture } from './soilMoisture'
+import {
+  Atmosphere,
+  tickWaterCycle,
+  releaseCreatureWater,
+  releasePlantWater,
+  releasePlantTranspiration,
+  plantStoredWater,
+} from './waterCycle'
+import { distributeInitialWorldWater, fundInitialCreatureHydration } from './waterInit'
 import { Rng } from './rng'
-import type { Corpse, Creature, Plant, WorldSnapshot, WorldStats } from './types'
+import type { Corpse, Creature, Plant, Pond, WorldSnapshot, WorldStats } from './types'
 
 export class World {
   private plants: Plant[] = []
   private corpses: Corpse[] = []
   private creatures: Creature[] = []
+  private ponds: Pond[] = []
+  private soil: SoilMoisture = new SoilMoisture()
+  private atmosphere: Atmosphere = new Atmosphere()
   private pathogens: Pathogen[] = []
   private rng: Rng
   private settings: SimSettings
@@ -108,6 +159,25 @@ export class World {
     grassPlantCount: 0,
     bushPlantCount: 0,
     treePlantCount: 0,
+    pondWater: 0,
+    hasPond: false,
+    airWater: 0,
+    soilWater: 0,
+    creatureWater: 0,
+    plantWater: 0,
+    totalWater: 0,
+    totalWaterBudget: 0,
+    avgSoilMoisture: 0,
+    airHumidity: 0,
+    isRaining: false,
+    deathCauseCounts: createEmptyDeathCauseCounts(),
+    dayPhase: 0.3,
+    sunlight: sunlightFactor(0.3),
+    isNight: false,
+    season: 'spring',
+    seasonPhase: 0.25,
+    effectiveDayLengthSeconds: DEFAULT_SIM_SETTINGS.dayLengthSeconds,
+    temperature: 20,
   }
   private primaryProductionThisTick = 0
   /** Broad-phase neighbor index for the current tick. */
@@ -136,9 +206,19 @@ export class World {
     resetCorpseIds()
     resetCreatureIds()
     resetPathogenIds()
+    resetPondIds()
     this.plants = []
     this.corpses = []
     this.creatures = []
+    this.ponds = [createPond(this.rng, this.settings.pondBaseRadius)]
+    this.soil = new SoilMoisture()
+    this.atmosphere = new Atmosphere()
+    distributeInitialWorldWater(
+      this.settings.totalWater,
+      this.soil,
+      this.ponds,
+      this.atmosphere,
+    )
     this.pathogens = createInitialPathogens(this.rng, 3)
     const championPathogenDna = resolvePathogenChampionDna(this.settings)
     if (championPathogenDna && this.pathogens.length > 0) {
@@ -160,13 +240,35 @@ export class World {
       grassPlantCount: 0,
       bushPlantCount: 0,
       treePlantCount: 0,
+      pondWater: 0,
+      hasPond: false,
+      airWater: 0,
+      soilWater: 0,
+      creatureWater: 0,
+      plantWater: 0,
+      totalWater: 0,
+      totalWaterBudget: 0,
+      avgSoilMoisture: 0,
+      airHumidity: 0,
+      isRaining: false,
+      deathCauseCounts: createEmptyDeathCauseCounts(),
+      dayPhase: 0.3,
+      sunlight: sunlightFactor(0.3),
+      isNight: false,
+      season: 'spring',
+      seasonPhase: 0.25,
+      effectiveDayLengthSeconds: this.settings.dayLengthSeconds,
+      temperature: 20,
     }
     this.primaryProductionThisTick = 0
 
+    const starterKinds = allPlantKinds()
     for (let i = 0; i < this.settings.initialPlants; i++) {
       const championDna = i === 0 ? resolvePlantChampionDna(this.settings) : null
       if (championDna) {
         this.plants.push(createPlantWithDna(this.rng, championDna))
+      } else if (i < starterKinds.length) {
+        this.plants.push(createPlantWithDna(this.rng, createPlantKindDna(starterKinds[i], this.rng)))
       } else {
         this.plants.push(createPlant(this.rng))
       }
@@ -189,6 +291,11 @@ export class World {
     )) {
       this.creatures.push(createHerbivore(this.rng, spawn.position, spawn.dna))
     }
+    for (const plant of this.plants) {
+      absorbPlantWaterFromSoil(plant, this.soil)
+    }
+    fundInitialCreatureHydration(this.creatures, this.ponds, this.atmosphere)
+    this.stats.totalWaterBudget = this.settings.totalWater
     this.refreshStats()
   }
 
@@ -196,9 +303,49 @@ export class World {
     this.stats.tick += 1
     this.primaryProductionThisTick = 0
 
+    for (const creature of this.creatures) {
+      creature.pendingDeathCause = undefined
+    }
+
+    const season = computeSeasonSnapshot(
+      this.stats.tick,
+      this.settings.dayLengthSeconds,
+      this.settings.daysPerSeasonYear,
+    )
+    const dayLen = dayLengthTicks(season.effectiveDayLengthSeconds)
+    const dayPhase = dayPhaseAtTick(this.stats.tick, dayLen)
+    const sunlight = sunlightFactor(dayPhase)
+    this.stats.dayPhase = dayPhase
+    this.stats.sunlight = sunlight
+    this.stats.isNight = isNightSunlight(sunlight)
+    this.stats.season = season.season
+    this.stats.seasonPhase = season.seasonPhase
+    this.stats.effectiveDayLengthSeconds = season.effectiveDayLengthSeconds
+    const temperature = ambientTemperatureC(season.seasonPhase, dayPhase)
+    this.stats.temperature = temperature
+
+    tickWaterCycle(
+      this.atmosphere,
+      this.soil,
+      this.ponds,
+      temperature,
+      this.bounds.width,
+      this.bounds.height,
+    )
+
+    for (const pond of this.ponds) {
+      this.soil.seepFromPond(pond)
+    }
+    this.atmosphere.vapor += this.soil.tickLateralDiffusion()
+
     for (const plant of this.plants) {
+      applyPlantAging(plant)
+      applyPlantOldAge(plant)
+      applyPlantTemperature(plant, temperature, season.season)
+      const transpired = applyPlantDrought(plant, this.soil, season.season, temperature)
+      releasePlantTranspiration(transpired, plant, this.soil, this.atmosphere)
       const before = plant.energy
-      growPlant(plant)
+      growPlant(plant, this.soil, sunlight, temperature, season.season)
       this.primaryProductionThisTick += Math.max(0, plant.energy - before)
     }
 
@@ -208,6 +355,7 @@ export class World {
 
     this.spawnPlants()
     this.runCreatureBehavior()
+    this.applyPondDrowning()
     tickDiseaseSystem(this.creatures, this.pathogens, this.rng, this.stats.tick, this.settings)
     this.cullDead()
     this.refreshStats()
@@ -218,6 +366,8 @@ export class World {
       plants: this.plants,
       corpses: this.corpses,
       creatures: this.creatures,
+      ponds: this.ponds,
+      soil: this.soil.snapshot(this.atmosphere.isRaining),
       pathogens: this.pathogens,
       stats: { ...this.stats },
     }
@@ -232,34 +382,48 @@ export class World {
   }
 
   private spawnPlants(): void {
-    const { maxPlants } = this.settings
+    const kindCounts = countPlantsByKind(this.plants)
 
-    if (this.plants.length >= maxPlants) return
+    if (allPlantKindsAtCap(this.settings, kindCounts)) return
 
     if (this.plants.length === 0) {
       if (this.rng.chance(PLANT_EXTINCT_WIND_RESEED_CHANCE)) {
         const plant = createPlant(this.rng)
+        const kind = plantKindFromDna(plant.dna)
+        if (isPlantKindAtCap(this.settings, kindCounts, kind)) return
+        absorbPlantWaterFromSoil(plant, this.soil)
         this.plants.push(plant)
         this.primaryProductionThisTick += plant.energy
       }
       return
     }
 
-    const attempts = plantPopulationSpawnAttempts(this.plants)
+    const attempts = plantPopulationSpawnAttempts(this.plants, this.stats.season)
 
     for (let attempt = 0; attempt < attempts; attempt++) {
-      if (this.plants.length >= maxPlants) return
+      if (allPlantKindsAtCap(this.settings, kindCounts)) return
 
       const parent = pickPlantForReproduction(this.rng, this.plants)
-      if (!this.rng.chance(plantReproductionChance(parent))) continue
+      if (!this.rng.chance(plantReproductionChance(parent, this.stats.season))) continue
+
+      const parentKind = plantKindFromDna(parent.dna)
+      if (isPlantKindAtCap(this.settings, kindCounts, parentKind)) continue
 
       const parentTraits = plantTraits(parent)
+      const localMoisture = this.soil.sample(parent.x, parent.y)
+      const reproMoistureFloor =
+        SOIL_REPRO_MIN_MOISTURE * (1 - parentTraits.moistureNeed * 0.35)
+      if (localMoisture < reproMoistureFloor) continue
+
       const seedCost = Math.min(parent.energy * 0.14, parentTraits.maxEnergy * 0.09)
       if (parent.energy < seedCost + 0.25) continue
 
       parent.energy -= seedCost
-      const child = createPlantNear(this.rng, parent, seedCost * 0.95)
+      const child = createPlantNear(this.rng, parent, this.stats.season, seedCost * 0.95)
+      transferPlantSeedWater(parent, child, seedCost, this.atmosphere)
+      absorbPlantWaterFromSoil(child, this.soil)
       this.plants.push(child)
+      kindCounts[parentKind] += 1
     }
   }
 
@@ -271,6 +435,10 @@ export class World {
 
     this.grid = new CreatureGrid(this.creatures)
     this.ediblePlants = this.plants.filter(isPlantEdible)
+
+    for (const creature of this.creatures) {
+      decayCreatureMemories(creature, creatureTraits(creature))
+    }
 
     for (const creature of this.creatures) {
       updateMode(creature)
@@ -286,6 +454,7 @@ export class World {
           creature.vx *= traits.sleepMobility
           creature.vy *= traits.sleepMobility
         } else {
+          this.noteSensoryMemories(creature, traits)
           const target = this.findGoal(creature)
           moveToward(creature, target, traits)
         }
@@ -298,7 +467,24 @@ export class World {
     }
 
     for (const creature of this.creatures) {
-      if (!needsFood(creature)) continue
+      if (!needsWater(creature)) continue
+
+      const traits = creatureTraits(creature)
+
+      if (traits.pondDrinking > 0) {
+        for (const pond of this.ponds) {
+          const sip = tryDrinkFromPond(creature, pond, traits.pondDrinking)
+          if (sip > 0) {
+            creature.hydration = capHydration(creature, creature.hydration + sip)
+            recordCreatureMemory(creature, 'water', pond.x, pond.y, traits)
+            break
+          }
+        }
+      }
+    }
+
+    for (const creature of this.creatures) {
+      if (!needsFood(creature) && !needsWater(creature)) continue
 
       const traits = creatureTraits(creature)
       const forageReach = traits.radius + traits.forageReach
@@ -313,11 +499,12 @@ export class World {
       if (nearestPlant) {
         const biomass = tryEatPlant(creature, nearestPlant)
         if (biomass > 0) {
-          bitePlant(nearestPlant, biomass)
-          const gained = energyFromPlantBiomass(biomass, traits.forageEfficiency)
-          creature.energy = capEnergy(creature, creature.energy + gained)
-          if (!isPlantEdible(nearestPlant)) {
-            eatenPlantIds.add(nearestPlant.id)
+          const eaten = foragePlantBite(creature, nearestPlant, biomass, this.atmosphere)
+          if (eaten > 0) {
+            recordCreatureMemory(creature, 'food', nearestPlant.x, nearestPlant.y, traits)
+            if (!isPlantEdible(nearestPlant)) {
+              eatenPlantIds.add(nearestPlant.id)
+            }
           }
         }
       }
@@ -342,6 +529,7 @@ export class World {
           biteCorpse(nearestCorpse, biomass)
           const gained = energyFromCorpseBiomass(biomass, traits.forageEfficiency)
           creature.energy = capEnergy(creature, creature.energy + gained)
+          recordCreatureMemory(creature, 'food', nearestCorpse.x, nearestCorpse.y, traits)
           if (!isCorpseEdible(nearestCorpse)) {
             eatenCorpseIds.add(nearestCorpse.id)
           }
@@ -357,6 +545,7 @@ export class World {
         if (biomass > 0) {
           const gained = energyFromPreyBiomass(biomass, traits.forageEfficiency)
           creature.energy = capEnergy(creature, creature.energy + gained)
+          recordCreatureMemory(creature, 'food', prey.x, prey.y, traits)
           break
         }
       }
@@ -387,7 +576,13 @@ export class World {
     }
 
     for (const creature of this.creatures) {
-      applyMetabolism(creature)
+      const sweat = applyMetabolism(
+        creature,
+        this.stats.temperature,
+        this.atmosphere.humidity,
+        this.atmosphere.isRaining,
+      )
+      this.atmosphere.vapor += sweat
     }
 
     for (const creature of this.creatures) {
@@ -461,9 +656,40 @@ export class World {
     )
   }
 
+  private noteSensoryMemories(creature: Creature, traits: ReturnType<typeof creatureTraits>): void {
+    if (traits.memorySlots <= 0) return
+
+    if (creature.mode === 'thirsty') {
+      if (traits.pondDrinking > 0.08) {
+        const pond = findBestPondTarget(creature, this.ponds, traits.vision)
+        if (pond && isPondDrinkable(pond)) {
+          recordCreatureMemory(creature, 'water', pond.x, pond.y, traits, 0.6)
+        }
+      }
+      const plant = findBestPlantWaterTarget(creature, this.ediblePlants, traits.vision)
+      if (plant) {
+        recordCreatureMemory(creature, 'water', plant.x, plant.y, traits, 0.5)
+      }
+    }
+
+    if (creature.mode === 'hungry') {
+      const food = this.findBestPlantFood(creature, traits.vision)
+      if (food) {
+        recordCreatureMemory(creature, 'food', food.x, food.y, traits, 0.55)
+      }
+    }
+  }
+
   private findFoodGoal(creature: Creature, vision: number): { x: number; y: number } {
+    const traits = creatureTraits(creature)
+    const seekRange = vision * traits.exploreVisionMult
+    const memoryRange = seekRange * (1.6 + traits.memoryRecall)
+    const memory = bestMemoryGoal(creature, 'food', traits, memoryRange)
+    const memoryScore = memory?.score ?? 0
+
     const food = this.findBestPlantFood(creature, vision)
     const foodDist = food ? toroidalDistance(creature, food) : Infinity
+    const liveFoodScore = food ? 1 / (1 + foodDist / Math.max(vision, 1)) : 0
 
     const corpse = findBestCorpseTarget(creature, this.corpses, vision)
     if (corpse) {
@@ -482,7 +708,84 @@ export class World {
       }
     }
 
+    if (memory && memoryScore > 0.04 && (!food || memoryScore > liveFoodScore * 1.02)) {
+      return { x: memory.x, y: memory.y }
+    }
+
     return food ?? this.findFoodGoalWhileExploring(creature, vision) ?? this.pickWanderGoal(creature)
+  }
+
+  private resolveWaterMemoryGoal(
+    creature: Creature,
+    traits: ReturnType<typeof creatureTraits>,
+    memory: { x: number; y: number },
+    seekRange: number,
+    canPond: boolean,
+  ): { x: number; y: number } {
+    if (canPond) {
+      for (const pond of this.ponds) {
+        if (!isPondDrinkable(pond)) continue
+        const dist = toroidalDistance(memory, pond)
+        if (dist < seekRange * 0.55 + pond.baseRadius) {
+          return pondApproachTarget(creature, pond, traits.radius + traits.forageReach * 0.2)
+        }
+      }
+    }
+    return { x: memory.x, y: memory.y }
+  }
+
+  private findWaterGoal(creature: Creature, vision: number): { x: number; y: number } {
+    const traits = creatureTraits(creature)
+    const canPond = traits.pondDrinking > 0.08
+    const seekRange = vision * traits.exploreVisionMult
+    const memoryRange = seekRange * (1.6 + traits.memoryRecall)
+
+    const memory = bestMemoryGoal(creature, 'water', traits, memoryRange)
+    const memoryScore = memory?.score ?? 0
+
+    const pond = canPond ? findBestPondTarget(creature, this.ponds, seekRange) : null
+    const pondDist = pond ? toroidalDistance(creature, pond) : Infinity
+    const pondScore = pond ? pondWaterScore(creature, pondDist, seekRange) : 0
+
+    const plant = findBestPlantWaterTarget(creature, this.ediblePlants, seekRange)
+    const plantDist = plant ? toroidalDistance(creature, plant) : Infinity
+    const plantScore = plant ? plantWaterScore(plant, plantDist, seekRange) : 0
+
+    const bestLiveScore = Math.max(pondScore, plantScore)
+    if (memory && memoryScore > bestLiveScore * 0.92 && memoryScore > 0.04) {
+      return this.resolveWaterMemoryGoal(creature, traits, memory, seekRange, canPond)
+    }
+
+    if (pondScore >= plantScore && pond) {
+      return pondApproachTarget(creature, pond, traits.radius + traits.forageReach * 0.2)
+    }
+
+    if (plant) {
+      return { x: plant.x, y: plant.y }
+    }
+
+    const fallbackPond = canPond ? findBestPondTarget(creature, this.ponds, vision) : null
+    if (fallbackPond) {
+      return pondApproachTarget(creature, fallbackPond, traits.radius + traits.forageReach * 0.2)
+    }
+
+    if (memory && memoryScore > 0.04) {
+      return this.resolveWaterMemoryGoal(creature, traits, memory, seekRange, canPond)
+    }
+
+    return this.pickWanderGoal(creature)
+  }
+
+  private applyPondDrowning(): void {
+    for (const pond of this.ponds) {
+      if (!isPondDrinkable(pond)) continue
+      for (const creature of this.creatures) {
+        applyCreatureDrowning(creature, pond)
+      }
+      for (const plant of this.plants) {
+        applyPlantDrowning(plant, pond, plantRadius(plant))
+      }
+    }
   }
 
   private findGoal(creature: Creature): { x: number; y: number } {
@@ -493,6 +796,8 @@ export class World {
         return this.findMateGoal(creature, traits.vision)
       case 'hungry':
         return this.findFoodGoal(creature, traits.vision)
+      case 'thirsty':
+        return this.findWaterGoal(creature, traits.vision)
       case 'sleepy':
         return this.pickWanderGoal(creature)
     }
@@ -546,11 +851,19 @@ export class World {
         survivors.push(creature)
         continue
       }
+      releaseCreatureWater(creature, this.soil, this.atmosphere)
       this.corpses.push(createCorpseFromCreature(creature))
+      const cause = classifyDeathCause(creature, this.ponds)
+      this.stats.deathCauseCounts[cause] += 1
       this.stats.deaths += 1
     }
 
     this.creatures = survivors
+
+    for (const plant of this.plants) {
+      if (isPlantEdible(plant)) continue
+      releasePlantWater(plant, this.soil, this.atmosphere)
+    }
     this.plants = this.plants.filter(isPlantEdible)
     this.corpses = this.corpses.filter(isCorpseEdible)
   }
@@ -564,6 +877,27 @@ export class World {
     this.stats.grassPlantCount = kindCounts.grass
     this.stats.bushPlantCount = kindCounts.bush
     this.stats.treePlantCount = kindCounts.tree
+
+    const pond = this.ponds[0]
+    this.stats.pondWater = pond?.water ?? 0
+    this.stats.hasPond = pond !== undefined
+    this.stats.airWater = this.atmosphere.vapor
+    this.stats.soilWater = this.soil.totalWater()
+    let creatureWater = 0
+    for (const creature of this.creatures) creatureWater += creature.hydration
+    this.stats.creatureWater = creatureWater
+    let plantWater = 0
+    for (const plant of this.plants) plantWater += plantStoredWater(plant)
+    this.stats.plantWater = plantWater
+    this.stats.totalWater =
+      this.stats.pondWater +
+      this.stats.airWater +
+      this.stats.soilWater +
+      this.stats.creatureWater +
+      plantWater
+    this.stats.avgSoilMoisture = this.soil.averageMoisture()
+    this.stats.airHumidity = this.atmosphere.humidity
+    this.stats.isRaining = this.atmosphere.isRaining
 
     const energy = sumEntityEnergy(this.plants, this.creatures, this.corpses)
     this.stats.plantEnergy = energy.plants

@@ -1,6 +1,4 @@
 /** Herbivore genome layout — add species-specific gene maps later. */
-export const HERBIVORE_GENE_COUNT = 53
-
 export const HerbivoreGene = {
   Speed: 0,
   Size: 1,
@@ -58,7 +56,18 @@ export const HerbivoreGene = {
   CloseMateLeniency: 51,
   /** Pull toward nearby genetically similar creatures (group cohesion). */
   Cohesion: 52,
+  /** Hydration source bias: low = soil moisture, mid = both, high = pond water. */
+  WaterSource: 53,
+  /** Spatial recall for water and food — low = forgetful, high = remembers routes and patches. */
+  Memory: 54,
 } as const
+
+export const HERBIVORE_GENE_COUNT = 55
+
+/** Mid gene value = generalist (drinks from soil and pond). */
+export const DEFAULT_WATER_SOURCE_GENE = 127
+/** Mid gene value = moderate recall (a few locations, average retention). */
+export const DEFAULT_MEMORY_GENE = 127
 
 /** Mid gene values ≈ former hardcoded sim defaults (0.38 courtship, 0.45 close leniency). */
 export const DEFAULT_COURTSHIP_EAGERNESS_GENE = 115
@@ -68,7 +77,7 @@ export const DEFAULT_COHESION_GENE = 110
 export type HerbivoreGeneIndex = (typeof HerbivoreGene)[keyof typeof HerbivoreGene]
 
 /** Plant genome — color, growth, and spread are all heritable. */
-export const PLANT_GENE_COUNT = 16
+export const PLANT_GENE_COUNT = 20
 
 export const PlantGene = {
   GreenHue: 0,
@@ -88,7 +97,21 @@ export const PlantGene = {
   LeafPointiness: 14,
   /** Fixed lineage marker — grass / bush / tree (not in the budget pool). */
   Kind: 15,
+  /** How much soil moisture the plant needs to grow — low = drought tolerant, high = thirsty. */
+  MoistureNeed: 16,
+  /** Preferred growth temperature (°C center). */
+  TempPreference: 17,
+  /** Width of the comfortable growth band (narrow vs broad). */
+  TempGrowthRange: 18,
+  /** Extra margin beyond growth band before lethal cold/heat. */
+  TempSurvivalRange: 19,
 } as const
+
+/** Mid gene value = moderate moisture requirement. */
+export const DEFAULT_PLANT_MOISTURE_NEED_GENE = 127
+export const DEFAULT_PLANT_TEMP_PREFERENCE_GENE = 127
+export const DEFAULT_PLANT_TEMP_GROWTH_RANGE_GENE = 127
+export const DEFAULT_PLANT_TEMP_SURVIVAL_RANGE_GENE = 110
 
 export type PlantGeneIndex = (typeof PlantGene)[keyof typeof PlantGene]
 
@@ -108,6 +131,11 @@ export type PlantTraits = {
   mutationRate: number
   mutationAmount: number
   hardiness: number
+  moistureNeed: number
+  maxAge: number
+  idealTemp: number
+  tempGrowthHalfWidth: number
+  tempSurvivalHalfWidth: number
 }
 
 export type CreatureShape = 'round' | 'oval' | 'square' | 'triangle'
@@ -126,6 +154,7 @@ export type HerbivoreTraits = {
   lightness: number
   shape: CreatureShape
   hungerRatio: number
+  thirstRatio: number
   satietyBuffer: number
   minSleepEnergyRatio: number
   sleepFatigueThreshold: number
@@ -136,6 +165,8 @@ export type HerbivoreTraits = {
   maturationAge: number
   pregnancyTicks: number
   maxEnergy: number
+  maxHydration: number
+  thirstDehydration: number
   reproCooldown: number
   mateRange: number
   sleepMobility: number
@@ -172,6 +203,16 @@ export type HerbivoreTraits = {
   courtshipEagerness: number
   closeMateLeniency: number
   cohesion: number
+  /** 0–1 ability to hydrate from soil moisture at current location. */
+  soilDrinking: number
+  /** 0–1 ability to hydrate from pond water. */
+  pondDrinking: number
+  /** How many locations the creature can remember at once (0 = no memory). */
+  memorySlots: number
+  /** Strength lost per tick from each memory. */
+  memoryDecay: number
+  /** 0–1 how strongly remembered places steer navigation. */
+  memoryRecall: number
 }
 
 /** Pathogen genome — antigens and transmission traits are heritable. */

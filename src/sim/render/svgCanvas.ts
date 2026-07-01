@@ -69,10 +69,16 @@ export function drawPlantAppearance(
 ): void {
   ctx.save()
   ctx.translate(x, y)
-  ctx.scale(radius, radius)
+  ctx.scale(radius * appearance.aspectX, radius * appearance.aspectY)
 
-  strokeSvgPath(ctx, appearance.stemPath, stemStroke, 0.14, 1)
-  fillSvgPath(ctx, appearance.foliagePath, foliageFill)
+  if (appearance.stemPath) {
+    const stemWidth = appearance.silhouette === 'tree' ? 0.11 : 0.14
+    strokeSvgPath(ctx, appearance.stemPath, stemStroke, stemWidth, 1)
+  }
+
+  for (const foliagePath of appearance.foliagePaths) {
+    fillSvgPath(ctx, foliagePath, foliageFill)
+  }
 
   ctx.restore()
 }

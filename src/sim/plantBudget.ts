@@ -13,6 +13,7 @@ export const PLANT_BUDGET_GENES: readonly PlantGeneIndex[] = [
   PlantGene.Reproduction,
   PlantGene.BaseRadius,
   PlantGene.Hardiness,
+  PlantGene.MoistureNeed,
 ] as const
 
 /** Bush budget — default reference total (8 genes × 160). */

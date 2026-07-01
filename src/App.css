@@ -51,15 +51,23 @@ button:hover {
   display: flex;
   flex-direction: column;
   max-height: 100vh;
+  max-height: 100dvh;
   border-right: 1px solid #1d2a21;
   background: #0d120f;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .stats-panel {
   padding: 1.25rem;
   flex-shrink: 0;
-  border-bottom: 1px solid #1d2a21;
+}
+
+.map-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .stats-header {
@@ -263,24 +271,37 @@ button:hover {
 
 .stats-panel {
   padding: 1.25rem;
-  flex-shrink: 0;
-  border-bottom: 1px solid #1d2a21;
 }
 
 .paused-label {
   color: #ffb347;
 }
 
-.creature-inspector {
-  flex: 1;
-  min-height: 0;
-  padding: 0 1.25rem 1.25rem;
-  overflow-y: auto;
-  border-top: 1px solid #1d2a21;
+.rain-label {
+  color: #7ec8ff;
 }
 
-.creature-inspector.empty {
-  padding-top: 1rem;
+.water-sub-label {
+  font-size: 0.85rem;
+  color: #8aa898;
+}
+
+.creature-inspector {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 4;
+  width: min(320px, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  overflow-y: auto;
+  padding: 0.85rem 1rem 1rem;
+  border-radius: 12px;
+  background: rgba(13, 18, 15, 0.94);
+  border: 1px solid #2a3d32;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: auto;
 }
 
 .creature-inspector h2,
@@ -299,7 +320,7 @@ button:hover {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding-top: 1rem;
+  padding-top: 0.15rem;
 }
 
 .inspector-title-row {
@@ -357,6 +378,7 @@ button:hover {
 }
 
 .mode-hungry { color: #ffb347; }
+.mode-thirsty { color: #6ec8ff; }
 .mode-horny { color: #ff7eb8; }
 .mode-sleepy { color: #9eb4ff; }
 
@@ -486,6 +508,22 @@ button:hover {
   background: #0a0e0b;
   cursor: grab;
   touch-action: none;
+  --ambience-r: 118;
+  --ambience-g: 198;
+  --ambience-b: 132;
+  --ambience-alpha: 0.5;
+  --ambience-width: 4px;
+}
+
+.canvas-viewport::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 var(--ambience-width) rgba(var(--ambience-r), var(--ambience-g), var(--ambience-b), var(--ambience-alpha)),
+    inset 0 0 28px rgba(var(--ambience-r), var(--ambience-g), var(--ambience-b), calc(var(--ambience-alpha) * 0.22));
 }
 
 .canvas-viewport:active {
@@ -537,6 +575,36 @@ button:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   pointer-events: none;
+}
+
+.time-badge {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 2;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(20, 28, 22, 0.88);
+  border: 1px solid #4a6a54;
+  color: #c8dcc8;
+  font-size: 0.82rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.time-badge.night {
+  border-color: #3a4a6a;
+  color: #a8b8e8;
+  background: rgba(12, 16, 28, 0.9);
+}
+
+.season-day-length {
+  font-size: 0.85rem;
+  color: #8aa898;
+}
+
+.night-label {
+  color: #9ab0e8;
 }
 
 .sim-canvas-source {
@@ -595,6 +663,87 @@ button:hover {
   margin: 0.15rem 0 0;
   font-size: 1.15rem;
   font-variant-numeric: tabular-nums;
+}
+
+.stats-grid .stats-span-full {
+  grid-column: 1 / -1;
+}
+
+.death-causes-list {
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.death-causes-list li {
+  display: grid;
+  grid-template-columns: 1.4rem 1fr auto;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.95rem;
+}
+
+.death-cause-rank {
+  color: #7d9684;
+  font-size: 0.85rem;
+}
+
+.death-cause-label {
+  color: #d8e8dc;
+}
+
+.death-cause-count {
+  font-variant-numeric: tabular-nums;
+  color: #a8c4b0;
+}
+
+.plant-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.plant-stats-total {
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+.plant-kind-grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.plant-kind-grid li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.45rem 0.35rem;
+  border-radius: 8px;
+  background: #0e1511;
+  border: 1px solid #1a2620;
+}
+
+.plant-kind-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #7d9684;
+  text-align: center;
+  line-height: 1.25;
+}
+
+.plant-kind-count {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  color: #d8e8dc;
 }
 
 .max-time-reached {
@@ -758,6 +907,17 @@ button:hover {
 
 .champion-hall-detail {
   min-width: 0;
+}
+
+.champion-hall-save-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.champion-hall-footer {
+  padding-top: 0.5rem;
 }
 
 .settings-hint-block {
@@ -997,6 +1157,91 @@ button:hover {
   border-style: dashed;
 }
 
+.legend-soil-swatch {
+  display: flex;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid rgba(180, 200, 190, 0.35);
+}
+
+.legend-plant-grass,
+.legend-plant-bush,
+.legend-plant-tree {
+  display: block;
+  width: 1.35rem;
+  height: 1.35rem;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.legend-plant-grass {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-1 -1 2 2'%3E%3Cpath fill='%2378c878' d='M-.2.2 L-.15-.7 L-.05.2 Z'/%3E%3Cpath fill='%2388d488' d='M0 .2 L0 -.85 L.08.2 Z'/%3E%3Cpath fill='%2368b868' d='M.18.2 L.22-.65 L.28.2 Z'/%3E%3C/svg%3E");
+}
+
+.legend-plant-bush {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-1 -1 2 2'%3E%3Cellipse fill='%2358a858' cx='0' cy='-.15' rx='.55' ry='.42'/%3E%3Cellipse fill='%2368b868' cx='-.35' cy='-.05' rx='.35' ry='.28'/%3E%3Cellipse fill='%2368b868' cx='.35' cy='-.05' rx='.35' ry='.28'/%3E%3C/svg%3E");
+}
+
+.legend-plant-tree {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-1 -1 2 2'%3E%3Cpath stroke='%235a4030' stroke-width='.12' d='M0 .35 L0 .95'/%3E%3Cpath fill='%233a6848' d='M0 -.75 L.45 -.2 L-.45 -.2 Z'/%3E%3Cpath fill='%23487858' d='M0 -.35 L.55 .05 L-.55 .05 Z'/%3E%3Cpath fill='%23588868' d='M0 .05 L.62 .35 L-.62 .35 Z'/%3E%3C/svg%3E");
+}
+
+.legend-soil-dry,
+.legend-soil-wet {
+  flex: 1;
+  height: 100%;
+}
+
+.legend-day-night {
+  display: flex;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid rgba(180, 200, 190, 0.35);
+}
+
+.legend-day-half {
+  flex: 1;
+  background: linear-gradient(180deg, #7ec8ff 0%, #c8e878 100%);
+}
+
+.legend-night-half {
+  flex: 1;
+  background: #0a1020;
+}
+
+.legend-temp-swatch {
+  display: flex;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid rgba(180, 200, 190, 0.35);
+}
+
+.legend-temp-cold,
+.legend-temp-ideal,
+.legend-temp-hot {
+  flex: 1;
+  height: 100%;
+}
+
+.legend-temp-cold {
+  background: #6a9ec8;
+}
+
+.legend-temp-ideal {
+  background: #7ec878;
+}
+
+.legend-temp-hot {
+  background: #d48450;
+}
+
 .legend-label {
   display: block;
   font-size: 0.84rem;
@@ -1232,8 +1477,14 @@ button:hover {
     overflow: hidden;
   }
 
-  .canvas-wrap {
+  .map-stage {
     order: -1;
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 0;
+  }
+
+  .canvas-wrap {
     flex: 0 0 auto;
     width: 100%;
     min-height: 0;
@@ -1332,12 +1583,15 @@ button:hover {
     grid-template-columns: 1fr;
   }
 
-  .creature-inspector.empty {
-    display: none;
-  }
-
   .creature-inspector {
-    padding: 0 1rem 1rem;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-height: min(52vh, 28rem);
+    border-radius: 12px 12px 0 0;
+    border-bottom: none;
   }
 
   .visual-legend {

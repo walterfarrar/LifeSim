@@ -52,5 +52,20 @@ export function toroidalNearestPoint(from: Vec2, to: Vec2): Vec2 {
   return { x: from.x + dx, y: from.y + dy }
 }
 
+/** Wrap a coordinate onto [0, max) — same torus as creature movement. */
+export function wrapCoordinate(value: number, max: number): number {
+  if (max <= 0) return 0
+  let wrapped = value % max
+  if (wrapped < 0) wrapped += max
+  return wrapped
+}
+
+export function wrapPosition(pos: Vec2, bounds = getWorldBounds()): Vec2 {
+  return {
+    x: wrapCoordinate(pos.x, bounds.width),
+    y: wrapCoordinate(pos.y, bounds.height),
+  }
+}
+
 /** Max vision radius at full gene expression — wrap render margin for entities. */
 export const MAX_VISION_RADIUS = 35 + 130

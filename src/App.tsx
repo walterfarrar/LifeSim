@@ -25,6 +25,7 @@ import {
   type AutoPathogenChampionRecord,
 } from './sim/pathogenAutoChampion'
 import { LineageTracker } from './sim/lineage/lineageTracker'
+import { createEmptyDeathCauseCounts } from './sim/deathCause'
 import { PlantSpeciesTracker } from './sim/plantLineage/plantSpeciesTracker'
 import { PathogenStrainTracker } from './sim/pathogenLineage/pathogenStrainTracker'
 import { loadSimSettings, saveSimSettings } from './sim/settingsStorage'
@@ -32,6 +33,7 @@ import { creatureToSavedGenome, type SavedGenome } from './sim/dnaExport'
 import {
   cloneSettings,
   settingsRunKey,
+  totalStartingHerbivores,
 } from './sim/simSettings'
 import type { WorldSnapshot } from './sim/types'
 import { clampSpeedMultiplier } from './sim/timeScale'
@@ -151,13 +153,14 @@ function App() {
 
   useEffect(() => {
     if (!snapshot) return
+    if (totalStartingHerbivores(activeSettings) === 0) return
     if (snapshot.stats.herbivoreCount > 0) return
     if (snapshot.stats.tick === 0) return
 
     setSeed(Date.now())
     setRunId((id) => id + 1)
     setSelectedId(null)
-  }, [snapshot])
+  }, [snapshot, activeSettings])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -201,6 +204,25 @@ function App() {
     grassPlantCount: 0,
     bushPlantCount: 0,
     treePlantCount: 0,
+    pondWater: 0,
+    hasPond: false,
+    airWater: 0,
+    soilWater: 0,
+    creatureWater: 0,
+    plantWater: 0,
+    totalWater: 0,
+    totalWaterBudget: 0,
+    avgSoilMoisture: 0,
+    airHumidity: 0,
+    isRaining: false,
+    deathCauseCounts: createEmptyDeathCauseCounts(),
+    dayPhase: 0.3,
+    sunlight: 0.85,
+    isNight: false,
+    season: 'spring' as const,
+    seasonPhase: 0.25,
+    effectiveDayLengthSeconds: 24,
+    temperature: 20,
   }
 
   const pendingSettingsChanges = settingsRunKey(draftSettings) !== settingsRunKey(activeSettings)
@@ -232,25 +254,29 @@ function App() {
             setEditorOpen(true)
           }}
         />
-        <CreatureInspector
-          creature={selectedCreature}
-          onClose={() => setSelectedId(null)}
-          onEditInDesigner={(creature) => {
-            setEditorGenome(creatureToSavedGenome(creature))
-            setEditorOpen(true)
-          }}
-        />
       </aside>
-      <SimulationCanvas
-        key={canvasKey}
-        paused={paused}
-        speedMultiplier={speedMultiplier}
-        seed={seed}
-        settings={activeSettings}
-        selectedId={selectedId}
-        onSnapshot={onSnapshot}
-        onSelectCreature={setSelectedId}
-      />
+      <div className="map-stage">
+        <SimulationCanvas
+          key={canvasKey}
+          paused={paused}
+          speedMultiplier={speedMultiplier}
+          seed={seed}
+          settings={activeSettings}
+          selectedId={selectedId}
+          onSnapshot={onSnapshot}
+          onSelectCreature={setSelectedId}
+        />
+        {selectedCreature && (
+          <CreatureInspector
+            creature={selectedCreature}
+            onClose={() => setSelectedId(null)}
+            onEditInDesigner={(creature) => {
+              setEditorGenome(creatureToSavedGenome(creature))
+              setEditorOpen(true)
+            }}
+          />
+        )}
+      </div>
       <ChampionHallModal open={hallOpen} onClose={() => setHallOpen(false)} />
       <CreatureEditorModal
         open={editorOpen}

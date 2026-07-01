@@ -6,18 +6,28 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { TICKS_PER_SECOND } from '../sim/config'
+import { dayNightLabel, applyViewportAmbienceStyle } from '../sim/dayNight'
+import { formatDayLengthSeconds, seasonLabel, type SeasonName } from '../sim/seasons'
+import { formatTemperatureC } from '../sim/temperature'
 import { MIN_SPEED_MULTIPLIER } from '../sim/timeScale'
 import { corpseRadius, drawCorpseBody } from '../sim/entities/corpse'
 import { plantRadius } from '../sim/entities/plant'
 import { drawPlantBody } from '../sim/render/plantDraw'
+import { drawPondBody } from '../sim/render/pondDraw'
+import { drawSoilMoisture } from '../sim/render/soilDraw'
+import { pondRadius } from '../sim/entities/pond'
+import { moistureGrowthFactor } from '../sim/soilMoisture'
+import { temperatureComfortFactor } from '../sim/temperature'
+import { isPlantDormant } from '../sim/plantClimate'
 import { creatureTraits } from '../sim/entities/creature'
+import { plantTraits } from '../sim/entities/plant'
 import { drawCreatureBody, creatureFillStyle } from '../sim/render/creatureDraw'
 import { plantFillStyle } from '../sim/phenotype'
 import { MODE_RING_COLORS, VISUAL_THEME } from '../sim/render/visualTheme'
 import { toroidalDisplayOffsets } from '../sim/toroidal'
 import { World } from '../sim/world'
 import type { SimSettings } from '../sim/simSettings'
-import type { Creature, Plant, WorldSnapshot } from '../sim/types'
+import type { Creature, Plant, Pond, WorldSnapshot } from '../sim/types'
 
 import { clientToWorld } from './canvasCoords'
 import {
@@ -73,6 +83,14 @@ export function SimulationCanvas({
   })
   const [, setReady] = useState(false)
   const [viewport, setViewport] = useState<ViewportTransform>(DEFAULT_VIEWPORT)
+  const [dayDisplay, setDayDisplay] = useState({
+    label: 'Morning',
+    sunlight: 0.5,
+    isNight: false,
+    season: 'spring' as SeasonName,
+    dayLengthSeconds: 24,
+    temperature: 20,
+  })
 
   pausedRef.current = paused
   speedRef.current = speedMultiplier
@@ -161,8 +179,21 @@ export function SimulationCanvas({
         drawTiledWorld(displayCtx, worldCanvas, layout, viewportSize)
       }
 
+      const viewportEl = viewportRef.current
+      if (viewportEl) {
+        applyViewportAmbienceStyle(viewportEl, snapshot.stats.sunlight, snapshot.stats.season)
+      }
+
       if (snapshot.stats.tick !== lastReportedTick) {
         lastReportedTick = snapshot.stats.tick
+        setDayDisplay({
+          label: dayNightLabel(snapshot.stats.dayPhase),
+          sunlight: snapshot.stats.sunlight,
+          isNight: snapshot.stats.isNight,
+          season: snapshot.stats.season,
+          dayLengthSeconds: snapshot.stats.effectiveDayLengthSeconds,
+          temperature: snapshot.stats.temperature,
+        })
         onSnapshot(snapshot)
       }
       frameId = requestAnimationFrame(render)
@@ -300,6 +331,12 @@ export function SimulationCanvas({
       }}
     >
       {paused && <div className="paused-badge">Paused</div>}
+      <div
+        className={`time-badge${dayDisplay.isNight ? ' night' : ''}`}
+        title={`${seasonLabel(dayDisplay.season)} · ${formatTemperatureC(dayDisplay.temperature)} · day length ${formatDayLengthSeconds(dayDisplay.dayLengthSeconds)} · sunlight ${Math.round(dayDisplay.sunlight * 100)}%`}
+      >
+        {seasonLabel(dayDisplay.season)} · {dayDisplay.label}
+      </div>
       <VisualLegend />
       <div className="zoom-controls" aria-label="Map zoom">
         <button
@@ -350,9 +387,35 @@ function strokeCircle(
   ctx.stroke()
 }
 
-function drawPlantAt(ctx: CanvasRenderingContext2D, plant: Plant, ox: number, oy: number): void {
+function drawPlantAt(
+  ctx: CanvasRenderingContext2D,
+  plant: Plant,
+  ox: number,
+  oy: number,
+  soilMoisture: number,
+  temperature: number,
+  season: SeasonName,
+): void {
   const radius = plantRadius(plant)
-  drawPlantBody(ctx, plant, plant.x + ox, plant.y + oy, radius, plantFillStyle(plant))
+  const traits = plantTraits(plant)
+  const moistureFactor = moistureGrowthFactor(soilMoisture, traits.moistureNeed)
+  const dormant = isPlantDormant(plant.dna, season, temperature)
+  const tempComfort = dormant
+    ? 0.72
+    : temperatureComfortFactor(
+        temperature,
+        traits.idealTemp,
+        traits.tempGrowthHalfWidth,
+        traits.tempSurvivalHalfWidth,
+      )
+  drawPlantBody(
+    ctx,
+    plant,
+    plant.x + ox,
+    plant.y + oy,
+    radius,
+    plantFillStyle(plant, moistureFactor, tempComfort),
+  )
 }
 
 function drawCreatureAt(
@@ -425,6 +488,20 @@ function drawCreatureAt(
   }
 }
 
+function drawPondAt(ctx: CanvasRenderingContext2D, pond: Pond, ox: number, oy: number): void {
+  drawPondBody(ctx, pond, pond.x + ox, pond.y + oy)
+}
+
+function soilCellIndex(
+  soil: WorldSnapshot['soil'],
+  x: number,
+  y: number,
+): number {
+  const cx = ((Math.floor(x / soil.cellSize) % soil.cols) + soil.cols) % soil.cols
+  const cy = ((Math.floor(y / soil.cellSize) % soil.rows) + soil.rows) % soil.rows
+  return cy * soil.cols + cx
+}
+
 function drawWorld(
   ctx: CanvasRenderingContext2D,
   snapshot: WorldSnapshot,
@@ -432,15 +509,25 @@ function drawWorld(
   worldWidth: number,
   worldHeight: number,
 ): void {
-  const { plants, corpses, creatures } = snapshot
+  const { plants, corpses, creatures, ponds, soil, stats } = snapshot
 
   ctx.fillStyle = '#0f1410'
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
 
+  drawSoilMoisture(ctx, soil, worldWidth, worldHeight)
+
+  for (const pond of ponds) {
+    const margin = (pond.water > 0.5 ? pondRadius(pond) : pond.baseRadius * 0.55) + 8
+    for (const { ox, oy } of toroidalDisplayOffsets(pond.x, pond.y, margin, worldWidth, worldHeight)) {
+      drawPondAt(ctx, pond, ox, oy)
+    }
+  }
+
   for (const plant of plants) {
     const margin = plantRadius(plant) + 8
+    const soilMoisture = soil.values[soilCellIndex(soil, plant.x, plant.y)]
     for (const { ox, oy } of toroidalDisplayOffsets(plant.x, plant.y, margin, worldWidth, worldHeight)) {
-      drawPlantAt(ctx, plant, ox, oy)
+      drawPlantAt(ctx, plant, ox, oy, soilMoisture, stats.temperature, stats.season)
     }
   }
 

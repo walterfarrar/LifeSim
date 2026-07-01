@@ -1,3 +1,4 @@
+import { markPendingDeathCause } from '../deathCause'
 import { creatureTraits, toroidalDistance } from '../entities/creature'
 import type { Creature } from '../types'
 import type { Rng } from '../rng'
@@ -198,6 +199,7 @@ function applyInfectionHarm(creatures: Creature[], pathogens: Pathogen[]): void 
     const harm =
       effectiveSeverity * strainTraits.virulence * (0.35 + creature.infection.ticksInfected * 0.002)
     creature.energy -= harm + traits.metabolism * effectiveSeverity * 0.15
+    markPendingDeathCause(creature, 'disease')
 
     if (creature.infection.ticksInfected % 40 === 0) {
       creature.infection.severity = Math.min(1, creature.infection.severity + 0.04 * (1 - mitigated))

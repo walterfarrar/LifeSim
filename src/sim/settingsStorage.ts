@@ -4,6 +4,17 @@ import {
   clampWorldWidth,
 } from './worldBounds'
 import {
+  MAX_DAY_LENGTH_SECONDS,
+  MIN_DAY_LENGTH_SECONDS,
+  MAX_DAYS_PER_SEASON_YEAR,
+  MIN_DAYS_PER_SEASON_YEAR,
+  MAX_PLANT_KIND_CAP,
+  MIN_PLANT_KIND_CAP,
+  MAX_TOTAL_WATER,
+  MIN_TOTAL_WATER,
+  splitLegacyMaxPlants,
+} from './config'
+import {
   cloneSettings,
   DEFAULT_SIM_SETTINGS,
   MAX_CREATURE_GROUPS,
@@ -24,16 +35,49 @@ function sanitizeGroupFounders(raw: unknown, validIds: Set<string>): string[] {
   })
 }
 
+function sanitizePlantKindCaps(
+  raw: Partial<SimSettings> & { maxPlants?: number },
+  base: SimSettings,
+): Pick<SimSettings, 'maxGrassPlants' | 'maxBushPlants' | 'maxTreePlants'> {
+  const clampCap = (value: number) =>
+    clamp(Math.round(value), MIN_PLANT_KIND_CAP, MAX_PLANT_KIND_CAP)
+
+  const hasPerKind =
+    raw.maxGrassPlants !== undefined ||
+    raw.maxBushPlants !== undefined ||
+    raw.maxTreePlants !== undefined
+
+  if (hasPerKind) {
+    return {
+      maxGrassPlants: clampCap(raw.maxGrassPlants ?? base.maxGrassPlants),
+      maxBushPlants: clampCap(raw.maxBushPlants ?? base.maxBushPlants),
+      maxTreePlants: clampCap(raw.maxTreePlants ?? base.maxTreePlants),
+    }
+  }
+
+  const legacyTotal =
+    typeof raw.maxPlants === 'number'
+      ? raw.maxPlants
+      : base.maxGrassPlants + base.maxBushPlants + base.maxTreePlants
+  const split = splitLegacyMaxPlants(legacyTotal)
+  return {
+    maxGrassPlants: clampCap(split.maxGrassPlants),
+    maxBushPlants: clampCap(split.maxBushPlants),
+    maxTreePlants: clampCap(split.maxTreePlants),
+  }
+}
+
 function sanitizeSettings(raw: Partial<SimSettings>): SimSettings {
   const base = DEFAULT_SIM_SETTINGS
   const validGenomeIds = validFounderGenomeIds()
+  const plantCaps = sanitizePlantKindCaps(raw, base)
   return {
     worldWidth: clampWorldWidth(Number(raw.worldWidth ?? base.worldWidth)),
     worldHeight: clampWorldHeight(Number(raw.worldHeight ?? base.worldHeight)),
     creatureGroups: clamp(Math.round(raw.creatureGroups ?? base.creatureGroups), 1, 8),
-    herbivoresPerGroup: clamp(Math.round(raw.herbivoresPerGroup ?? base.herbivoresPerGroup), 2, 80),
+    herbivoresPerGroup: clamp(Math.round(raw.herbivoresPerGroup ?? base.herbivoresPerGroup), 0, 80),
     initialPlants: clamp(Math.round(raw.initialPlants ?? base.initialPlants), 0, 2000),
-    maxPlants: clamp(Math.round(raw.maxPlants ?? base.maxPlants), 50, 5000),
+    ...plantCaps,
     founderGeneSpread: clamp(Math.round(raw.founderGeneSpread ?? base.founderGeneSpread), 1, 40),
     founderJitterChance: clamp(Number(raw.founderJitterChance ?? base.founderJitterChance), 0, 1),
     groupFounders: sanitizeGroupFounders(raw.groupFounders, validGenomeIds),
@@ -46,6 +90,18 @@ function sanitizeSettings(raw: Partial<SimSettings>): SimSettings {
       1,
     ),
     pathogenFounderId: '',
+    pondBaseRadius: clamp(Math.round(raw.pondBaseRadius ?? base.pondBaseRadius), 30, 200),
+    totalWater: clamp(Math.round(raw.totalWater ?? base.totalWater), MIN_TOTAL_WATER, MAX_TOTAL_WATER),
+    dayLengthSeconds: clamp(
+      Number(raw.dayLengthSeconds ?? base.dayLengthSeconds),
+      MIN_DAY_LENGTH_SECONDS,
+      MAX_DAY_LENGTH_SECONDS,
+    ),
+    daysPerSeasonYear: clamp(
+      Math.round(raw.daysPerSeasonYear ?? base.daysPerSeasonYear),
+      MIN_DAYS_PER_SEASON_YEAR,
+      MAX_DAYS_PER_SEASON_YEAR,
+    ),
   }
 }
 

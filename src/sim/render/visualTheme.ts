@@ -2,6 +2,7 @@ import type { CreatureMode } from '../types'
 
 export const MODE_RING_COLORS: Record<CreatureMode, string> = {
   hungry: 'rgba(255, 180, 60, 0.75)',
+  thirsty: 'rgba(80, 190, 255, 0.75)',
   horny: 'rgba(255, 100, 180, 0.75)',
   sleepy: 'rgba(120, 140, 255, 0.55)',
 }
@@ -16,6 +17,9 @@ export const VISUAL_THEME = {
   plantHealthy: 'rgb(40, 140, 55)',
   plantDim: 'rgb(40, 80, 55)',
   corpseSample: 'hsl(28, 28%, 22%)',
+  pondSample: 'rgba(60, 150, 230, 0.55)',
+  soilWetSample: 'rgba(40, 90, 70, 0.45)',
+  soilDrySample: 'rgba(55, 42, 28, 0.35)',
   creatureSample: 'hsl(160, 55%, 42%)',
   creatureFemaleSample: 'hsl(172, 55%, 42%)',
   canvasBackground: '#0f1410',
@@ -23,12 +27,14 @@ export const VISUAL_THEME = {
 
 export const MODE_LABELS: Record<CreatureMode, string> = {
   hungry: 'Hungry',
+  thirsty: 'Thirsty',
   horny: 'Horny',
   sleepy: 'Sleepy',
 }
 
 export const MODE_DESCRIPTIONS: Record<CreatureMode, string> = {
   hungry: 'Seeking food; amber ring',
+  thirsty: 'Seeking water; cyan ring',
   horny: 'Seeking a mate; pink ring',
   sleepy: 'Resting; blue ring',
 }

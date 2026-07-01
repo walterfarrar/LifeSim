@@ -192,8 +192,9 @@ export function SettingsModal({
               />
               <NumberField
                 label="Creatures per group"
+                hint="Set to 0 for a plant-only world (seasons, weather, no auto-reseed)"
                 value={draft.herbivoresPerGroup}
-                min={2}
+                min={0}
                 max={80}
                 onChange={(herbivoresPerGroup) => onChange(patch(draft, { herbivoresPerGroup }))}
               />
@@ -211,11 +212,28 @@ export function SettingsModal({
                 onChange={(initialPlants) => onChange(patch(draft, { initialPlants }))}
               />
               <NumberField
-                label="Max plants"
-                value={draft.maxPlants}
-                min={50}
-                max={5000}
-                onChange={(maxPlants) => onChange(patch(draft, { maxPlants }))}
+                label="Max grass"
+                hint="Population cap for grass"
+                value={draft.maxGrassPlants}
+                min={0}
+                max={4000}
+                onChange={(maxGrassPlants) => onChange(patch(draft, { maxGrassPlants }))}
+              />
+              <NumberField
+                label="Max deciduous"
+                hint="Population cap for deciduous bushes"
+                value={draft.maxBushPlants}
+                min={0}
+                max={4000}
+                onChange={(maxBushPlants) => onChange(patch(draft, { maxBushPlants }))}
+              />
+              <NumberField
+                label="Max conifers"
+                hint="Population cap for conifer trees"
+                value={draft.maxTreePlants}
+                min={0}
+                max={4000}
+                onChange={(maxTreePlants) => onChange(patch(draft, { maxTreePlants }))}
               />
               <label className="settings-field settings-field-checkbox">
                 <span className="settings-label">Respawn best plant species</span>
@@ -269,6 +287,48 @@ export function SettingsModal({
                 onChange={(pct) =>
                   onChange(patch(draft, { pathogenChampionSpawnChance: pct / 100 }))
                 }
+              />
+            </div>
+          </details>
+
+          <details open className="settings-group">
+            <summary>Weather</summary>
+            <div className="settings-fields">
+              <NumberField
+                label="Total water"
+                hint="Closed-cycle budget at reset — split across pond, soil, air, and living; lower = desert, higher = oasis"
+                value={draft.totalWater}
+                min={2000}
+                max={250000}
+                step={1000}
+                onChange={(totalWater) => onChange(patch(draft, { totalWater }))}
+              />
+              <NumberField
+                label="Pond size"
+                hint="Base radius at full water in pixels; starting volume scales with area"
+                value={draft.pondBaseRadius}
+                min={30}
+                max={200}
+                step={5}
+                onChange={(pondBaseRadius) => onChange(patch(draft, { pondBaseRadius }))}
+              />
+              <NumberField
+                label="Day length"
+                hint="Equinox day–night cycle at 1× speed; longer in summer, shorter in winter"
+                value={draft.dayLengthSeconds}
+                min={6}
+                max={180}
+                step={1}
+                onChange={(dayLengthSeconds) => onChange(patch(draft, { dayLengthSeconds }))}
+              />
+              <NumberField
+                label="Days per year"
+                hint="Day–night cycles per season year (spring → summer → autumn → winter)"
+                value={draft.daysPerSeasonYear}
+                min={4}
+                max={24}
+                step={1}
+                onChange={(daysPerSeasonYear) => onChange(patch(draft, { daysPerSeasonYear }))}
               />
             </div>
           </details>

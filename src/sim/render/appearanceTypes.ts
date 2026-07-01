@@ -6,9 +6,14 @@ export type CreatureAppearance = {
   aspectY: number
 }
 
+export type PlantSilhouette = 'grass' | 'bush' | 'tree'
+
 export type PlantAppearance = {
-  foliagePath: string
-  stemPath: string
+  silhouette: PlantSilhouette
+  foliagePaths: string[]
+  stemPath: string | null
+  aspectX: number
+  aspectY: number
 }
 
 export type CorpseAppearance = CreatureAppearance

@@ -1,4 +1,5 @@
 export const CHAMPION_HALL_MAX = 5
+export const CREATURE_CHAMPION_HALL_MAX = 10
 
 export type ChampionHallEntry = {
   entryId: string
@@ -12,11 +13,12 @@ export type ChampionHallEntry = {
 export function crownInHall<T extends ChampionHallEntry>(
   hall: readonly T[],
   candidate: T,
+  maxEntries: number = CHAMPION_HALL_MAX,
 ): { hall: T[]; crowned: boolean } {
   const reigning = hall[0] ?? null
   const withoutDuplicate = hall.filter((entry) => entry.entryId !== candidate.entryId)
   const sorted = [...withoutDuplicate, candidate].sort((a, b) => b.fitnessScore - a.fitnessScore)
-  const next = sorted.slice(0, CHAMPION_HALL_MAX)
+  const next = sorted.slice(0, maxEntries)
   const madeHall = next.some((entry) => entry.entryId === candidate.entryId)
 
   if (!madeHall) {

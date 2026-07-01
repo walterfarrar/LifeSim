@@ -4,6 +4,8 @@ import {
   DEFAULT_CLOSE_MATE_LENIENCY_GENE,
   DEFAULT_COHESION_GENE,
   DEFAULT_COURTSHIP_EAGERNESS_GENE,
+  DEFAULT_MEMORY_GENE,
+  DEFAULT_WATER_SOURCE_GENE,
   HERBIVORE_GENE_COUNT,
   HerbivoreGene,
 } from './genes'
@@ -50,6 +52,10 @@ export function clampEditorGenes(genes: number[]): number[] {
       out.push(DEFAULT_CLOSE_MATE_LENIENCY_GENE)
     } else if (index === HerbivoreGene.Cohesion) {
       out.push(DEFAULT_COHESION_GENE)
+    } else if (index === HerbivoreGene.WaterSource) {
+      out.push(DEFAULT_WATER_SOURCE_GENE)
+    } else if (index === HerbivoreGene.Memory) {
+      out.push(DEFAULT_MEMORY_GENE)
     } else {
       out.push(127)
     }
@@ -77,6 +83,8 @@ export function createDefaultEditorGenome(name = 'New creature'): SavedGenome {
   genes[HerbivoreGene.CourtshipEagerness] = DEFAULT_COURTSHIP_EAGERNESS_GENE
   genes[HerbivoreGene.CloseMateLeniency] = DEFAULT_CLOSE_MATE_LENIENCY_GENE
   genes[HerbivoreGene.Cohesion] = DEFAULT_COHESION_GENE
+  genes[HerbivoreGene.WaterSource] = DEFAULT_WATER_SOURCE_GENE
+  genes[HerbivoreGene.Memory] = DEFAULT_MEMORY_GENE
   genes[HerbivoreGene.Hue] = 100
   genes[HerbivoreGene.Saturation] = 140
   genes[HerbivoreGene.SexExpression] = 200

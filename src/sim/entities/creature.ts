@@ -1,3 +1,4 @@
+import { markPendingDeathCause } from '../deathCause'
 import { cloneDNA, crossover, mutate } from '../dna'
 import { createRandomHerbivoreDNA } from '../herbivoreBudget'
 import { plantBiteEffectiveness } from '../foraging'
@@ -7,6 +8,7 @@ import type { Rng } from '../rng'
 import { toroidalDelta, toroidalDistance } from '../toroidal'
 import type { Creature, Plant, Vec2 } from '../types'
 import { getWorldBounds } from '../worldBounds'
+import { creatureSweatLoss } from '../waterCycle'
 import { plantTraits } from './plant'
 
 export { toroidalDelta, toroidalDistance } from '../toroidal'
@@ -37,6 +39,10 @@ export function createHerbivore(rng: Rng, position?: Vec2, dna = createRandomHer
       traits.maxEnergy,
       traits.reproThreshold * (traits.hungerRatio + traits.birthEnergyReserve),
     ),
+    hydration: Math.min(
+      traits.maxHydration,
+      traits.maxHydration * (0.9 + traits.birthEnergyReserve * 0.11),
+    ),
     age: 0,
     dna,
     reproductionCooldown: 0,
@@ -47,6 +53,7 @@ export function createHerbivore(rng: Rng, position?: Vec2, dna = createRandomHer
     wanderTicksRemaining: rng.int(traits.wanderDurationMin, traits.wanderDurationMin + traits.wanderDurationSpan),
     attackCooldown: 0,
     inbreedingLoad: 0,
+    memories: [],
   }
 }
 
@@ -86,10 +93,22 @@ export function applyMovement(creature: Creature): void {
   creature.y = wrap(creature.y + creature.vy, bounds.height)
 }
 
-export function applyMetabolism(creature: Creature): void {
+export function applyMetabolism(
+  creature: Creature,
+  tempC: number,
+  relativeHumidity: number,
+  raining = false,
+): number {
   const traits = creatureTraits(creature)
   const metabolismScale = creature.mode === 'sleepy' ? traits.sleepMetabolismScale : 1
   creature.energy -= traits.metabolism * metabolismScale
+  const sweat = creatureSweatLoss(
+    traits.thirstDehydration * metabolismScale,
+    tempC,
+    relativeHumidity,
+    raining,
+  )
+  creature.hydration = Math.max(0, creature.hydration - sweat)
   creature.age += 1
   if (creature.reproductionCooldown > 0) {
     creature.reproductionCooldown -= 1
@@ -98,6 +117,7 @@ export function applyMetabolism(creature: Creature): void {
     creature.attackCooldown -= 1
   }
   applyFatigue(creature)
+  return sweat
 }
 
 export function hungryEnterLine(creature: Creature): number {
@@ -114,20 +134,55 @@ export function needsFood(creature: Creature): boolean {
   return creature.energy < hungryExitLine(creature)
 }
 
+export function thirstyEnterLine(creature: Creature): number {
+  const traits = creatureTraits(creature)
+  return traits.maxHydration * traits.thirstRatio
+}
+
+export function thirstyExitLine(creature: Creature): number {
+  const traits = creatureTraits(creature)
+  return thirstyEnterLine(creature) + traits.maxHydration * traits.satietyBuffer * 0.52
+}
+
+export function needsWater(creature: Creature): boolean {
+  return creature.hydration < thirstyExitLine(creature)
+}
+
+export function capHydration(creature: Creature, amount: number): number {
+  return Math.min(creatureTraits(creature).maxHydration, amount)
+}
+
 /** What mode instincts want right now — before stickiness is applied. */
 export function desiredMode(creature: Creature): Creature['mode'] {
   const hungryEnter = hungryEnterLine(creature)
+  const thirstyEnter = thirstyEnterLine(creature)
+  const thirstyExit = thirstyExitLine(creature)
   const hornyAt = reproduceModeThreshold(creature)
   const traits = creatureTraits(creature)
   const minEnergyToSleep = traits.reproThreshold * traits.minSleepEnergyRatio
 
-  if (creature.energy < hungryEnter || (creature.mode === 'hungry' && creature.energy < hornyAt)) {
-    return 'hungry'
+  const needsThirst =
+    creature.hydration < thirstyEnter ||
+    (creature.mode === 'thirsty' && creature.hydration < thirstyExit)
+  const needsHunger =
+    creature.energy < hungryEnter || (creature.mode === 'hungry' && creature.energy < hornyAt)
+
+  if (needsThirst && needsHunger) {
+    const thirstFrac = creature.hydration / Math.max(thirstyEnter, 0.01)
+    const hungerFrac = creature.energy / Math.max(hungryEnter, 0.01)
+    return thirstFrac < hungerFrac ? 'thirsty' : 'hungry'
   }
+  if (needsThirst) return 'thirsty'
+  if (needsHunger) return 'hungry'
+
   if (creature.fatigue >= traits.sleepFatigueThreshold && creature.energy >= minEnergyToSleep) {
     return 'sleepy'
   }
-  if (canSeekMate(creature) && creature.energy >= hornyAt) {
+  if (
+    canSeekMate(creature) &&
+    creature.energy >= hornyAt &&
+    creature.hydration >= thirstyEnter
+  ) {
     return 'horny'
   }
   return 'hungry'
@@ -142,7 +197,16 @@ function modeStickinessTicks(creature: Creature): number {
 export function updateMode(creature: Creature): void {
   creature.modeTicksInCurrent += 1
   const target = desiredMode(creature)
+  const thirstyEnter = thirstyEnterLine(creature)
   const hungryEnter = hungryEnterLine(creature)
+
+  if (creature.hydration < thirstyEnter) {
+    if (creature.mode !== 'thirsty') {
+      creature.mode = 'thirsty'
+      creature.modeTicksInCurrent = 0
+    }
+    return
+  }
 
   if (creature.energy < hungryEnter) {
     if (creature.mode !== 'hungry') {
@@ -184,6 +248,7 @@ export function canReproduce(creature: Creature): boolean {
   return (
     creature.reproductionCooldown <= 0 &&
     creature.energy >= mateEnergyMinimum(creature) &&
+    creature.hydration >= thirstyEnterLine(creature) &&
     creature.age > traits.maturationAge
   )
 }
@@ -261,6 +326,15 @@ export function tickPregnancy(creature: Creature, rng: Rng): Creature | null {
   child.inbreedingLoad = computeInbreedingLoad(creature.dna, creature.pregnancyPartnerDna, childDna)
   child.energy = creature.pendingBirthEnergy
 
+  const childTraits = creatureTraits(child)
+  const targetHydration = Math.min(
+    childTraits.maxHydration,
+    childTraits.maxHydration * (0.82 + childTraits.birthEnergyReserve * 0.14),
+  )
+  const fromMother = Math.min(creature.hydration * 0.14, targetHydration)
+  creature.hydration = Math.max(0, creature.hydration - fromMother)
+  child.hydration = fromMother
+
   creature.pregnancyPartnerDna = undefined
   creature.pendingBirthEnergy = 0
   return child
@@ -268,7 +342,7 @@ export function tickPregnancy(creature: Creature, rng: Rng): Creature | null {
 
 export function isAlive(creature: Creature): boolean {
   const traits = creatureTraits(creature)
-  return creature.energy > 0 && creature.age < traits.maxAge
+  return creature.energy > 0 && creature.hydration > 0 && creature.age < traits.maxAge
 }
 
 export function distance(a: Vec2, b: Vec2): number {
@@ -303,6 +377,7 @@ export function tryAttackCreature(attacker: Creature, victim: Creature): boolean
 
   const damage = traits.attackDamage * (0.55 + traits.aggressiveness * 0.45)
   victim.energy -= damage
+  markPendingDeathCause(victim, 'combat')
   attacker.energy -= damage * 0.12
   attacker.attackCooldown = Math.floor(10 + (1 - traits.aggressiveness) * 22)
   return true

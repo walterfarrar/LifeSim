@@ -1,5 +1,6 @@
 import { TICKS_PER_SECOND } from './config'
 import {
+  CREATURE_CHAMPION_HALL_MAX,
   crownInHall,
   hallChampion,
   loadChampionHall,
@@ -143,7 +144,7 @@ export function tryUpdateAutoChampion(
     },
   )
 
-  const { hall: nextHall, crowned } = crownInHall(hall, candidate)
+  const { hall: nextHall, crowned } = crownInHall(hall, candidate, CREATURE_CHAMPION_HALL_MAX)
   const changed =
     nextHall.length !== hall.length ||
     nextHall.some((entry, index) => entry.entryId !== hall[index]?.entryId)

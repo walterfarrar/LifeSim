@@ -4,6 +4,7 @@ import { cloneDNA, geneValue } from './dna'
 import { HerbivoreGene, PlantGene } from './genes'
 import { isHerbivoreBudgetGene, transferHerbivoreBudget } from './herbivoreBudget'
 import { isPlantBudgetGene, normalizePlantBudget, transferPlantBudget } from './plantBudget'
+import { applyPlantKindClimate } from './plantClimate'
 import { PLANT_KIND_GENE, plantKindFromDna } from './plantKinds'
 import type { Rng } from './rng'
 
@@ -86,6 +87,10 @@ export function mutatePlant(dna: DNA, rng: Rng): DNA {
 
   for (let i = 0; i < next.length; i++) {
     if (i === PlantGene.Kind) continue
+    if (i === PlantGene.MoistureNeed) continue
+    if (i === PlantGene.TempPreference) continue
+    if (i === PlantGene.TempGrowthRange) continue
+    if (i === PlantGene.TempSurvivalRange) continue
     if (isPlantBudgetGene(i)) continue
     if (!rng.chance(perGeneRate)) continue
 
@@ -104,5 +109,6 @@ export function mutatePlant(dna: DNA, rng: Rng): DNA {
   next[PlantGene.Kind] = kindGene
   normalizePlantBudget(next)
   next[PlantGene.Kind] = kindGene
+  applyPlantKindClimate(next, parentKind)
   return next
 }

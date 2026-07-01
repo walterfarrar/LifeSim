@@ -163,6 +163,21 @@ export function VisualLegend() {
           </div>
 
           <div className="legend-section">
+            <h3>Plant lineages</h3>
+            <ul className="legend-list">
+              <LegendItem label="Grass" detail="Thin blades; spreads fast in summer, dormant in winter">
+                <span className="legend-plant-grass" aria-hidden />
+              </LegendItem>
+              <LegendItem label="Deciduous" detail="Low lumpy shrubs; active spring–autumn, dormant in winter">
+                <span className="legend-plant-bush" aria-hidden />
+              </LegendItem>
+              <LegendItem label="Conifer" detail="Tall evergreen tiers on a trunk; hardy year-round">
+                <span className="legend-plant-tree" aria-hidden />
+              </LegendItem>
+            </ul>
+          </div>
+
+          <div className="legend-section">
             <h3>Environment</h3>
             <ul className="legend-list">
               <LegendItem label="Plant color" detail="Green hue from DNA; brightness shows energy">
@@ -176,6 +191,31 @@ export function VisualLegend() {
               </LegendItem>
               <LegendItem label="Corpse" detail="Dead creature; scavenged or decays away">
                 <CircleSwatch color={VISUAL_THEME.corpseSample} filled />
+              </LegendItem>
+              <LegendItem label="Pond" detail="Fresh water at the shore; submerged creatures and plants drown">
+                <CircleSwatch color={VISUAL_THEME.pondSample} filled wide />
+              </LegendItem>
+              <LegendItem label="Soil moisture" detail="Wettest at the pond shore, tapering inland; plants drink from local soil">
+                <span className="legend-soil-swatch" aria-hidden>
+                  <span className="legend-soil-dry" style={{ backgroundColor: VISUAL_THEME.soilDrySample }} />
+                  <span className="legend-soil-wet" style={{ backgroundColor: VISUAL_THEME.soilWetSample }} />
+                </span>
+              </LegendItem>
+              <LegendItem label="Temperature" detail="Off-ideal temps slow plant growth; only extreme heat or cold is lethal">
+                <span className="legend-temp-swatch" aria-hidden>
+                  <span className="legend-temp-cold" />
+                  <span className="legend-temp-ideal" />
+                  <span className="legend-temp-hot" />
+                </span>
+              </LegendItem>
+              <LegendItem label="Day & night" detail="Window border color shifts by season and darkens at night">
+                <span className="legend-day-night" aria-hidden>
+                  <span className="legend-day-half" />
+                  <span className="legend-night-half" />
+                </span>
+              </LegendItem>
+              <LegendItem label="Rain" detail="Refills soil and tops up the pond (see stats panel)">
+                <CircleSwatch color="rgba(100, 160, 220, 0.6)" filled wide />
               </LegendItem>
             </ul>
           </div>

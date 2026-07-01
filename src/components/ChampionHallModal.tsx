@@ -3,8 +3,10 @@ import {
   loadCreatureChampionHall,
   type AutoChampionRecord,
 } from '../sim/autoChampion'
+import { CREATURE_CHAMPION_HALL_MAX } from '../sim/championHall'
 import { summarizeChampion } from '../sim/championSummary'
-import { geneArrayToDna } from '../sim/dnaExport'
+import { cloneSavedGenome } from '../sim/creatureEditor'
+import { geneArrayToDna, saveToGenomeLibrary } from '../sim/dnaExport'
 import { geneArrayToPlantDna } from '../sim/plantDnaExport'
 import { geneArrayToPathogenDna } from '../sim/pathogenDnaExport'
 import { expressPathogen } from '../sim/disease/pathogen'
@@ -59,6 +61,12 @@ export function ChampionHallModal({ open, onClose }: ChampionHallModalProps) {
   const [plantHall, setPlantHall] = useState<AutoPlantChampionRecord[]>([])
   const [pathogenHall, setPathogenHall] = useState<AutoPathogenChampionRecord[]>([])
   const [selectedRank, setSelectedRank] = useState(0)
+  const [message, setMessage] = useState<string | null>(null)
+
+  const flash = (text: string) => {
+    setMessage(text)
+    window.setTimeout(() => setMessage(null), 2800)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -66,6 +74,7 @@ export function ChampionHallModal({ open, onClose }: ChampionHallModalProps) {
     setPlantHall(loadPlantChampionHall())
     setPathogenHall(loadPathogenChampionHall())
     setSelectedRank(0)
+    setMessage(null)
   }, [open])
 
   useEffect(() => {
@@ -125,6 +134,16 @@ export function ChampionHallModal({ open, onClose }: ChampionHallModalProps) {
     return expressPathogen(pathogenDna)
   }, [pathogenDna])
 
+  const handleSaveCreatureToLibrary = () => {
+    if (!selectedCreature) return
+    const saved = cloneSavedGenome(selectedCreature.genome, {
+      id: `genome-${Date.now()}`,
+      name: selectedCreature.genome.name,
+    })
+    saveToGenomeLibrary(saved)
+    flash(`Saved “${saved.name}” to your library`)
+  }
+
   if (!open) return null
 
   const hasAnyHall = creatureHall.length + plantHall.length + pathogenHall.length > 0
@@ -142,7 +161,7 @@ export function ChampionHallModal({ open, onClose }: ChampionHallModalProps) {
           <div>
             <h2 id="champion-hall-title">Champion hall of fame</h2>
             <p className="settings-subtitle">
-              Top 5 all-time by category — updated only when a new reigning champion is crowned
+              Top {CREATURE_CHAMPION_HALL_MAX} creature lineages all-time; top 5 plants and diseases
             </p>
           </div>
           <button type="button" className="settings-modal-close" onClick={onClose} aria-label="Close">
@@ -178,7 +197,8 @@ export function ChampionHallModal({ open, onClose }: ChampionHallModalProps) {
           {!hasAnyHall ? (
             <p className="settings-empty">
               No champions saved yet. Lineages, plant species, and pathogen strains are sampled once
-              a minute; beating the reigning champion adds them to the hall (max 5 per category).
+              a minute; strong performers are ranked in the hall (top {CREATURE_CHAMPION_HALL_MAX}{' '}
+              creatures, top 5 plants and diseases).
             </p>
           ) : activeHall.length === 0 ? (
             <p className="settings-empty">No champions in this category yet.</p>
@@ -228,6 +248,11 @@ export function ChampionHallModal({ open, onClose }: ChampionHallModalProps) {
                     )}
                     <ExpressedTraitsList traits={creatureTraits} />
                     <GenomeDnaTable dna={creatureDna} />
+                    <div className="champion-hall-save-actions">
+                      <button type="button" className="settings-primary" onClick={handleSaveCreatureToLibrary}>
+                        Save to library
+                      </button>
+                    </div>
                   </>
                 )}
 
@@ -248,6 +273,8 @@ export function ChampionHallModal({ open, onClose }: ChampionHallModalProps) {
                         Reproduction: plantTraits.reproductionRate,
                         'Spread min': plantTraits.spreadMin,
                         'Spread max': plantTraits.spreadMax,
+                        'Moisture need': `${Math.round(plantTraits.moistureNeed * 100)}%`,
+                        Hardiness: `${Math.round(plantTraits.hardiness * 100)}%`,
                       }}
                     />
                     <GenomeDnaTable dna={plantDna} labels={PLANT_GENE_LABELS} />
@@ -282,6 +309,12 @@ export function ChampionHallModal({ open, onClose }: ChampionHallModalProps) {
             </div>
           )}
         </div>
+
+        {message && (
+          <footer className="settings-modal-footer champion-hall-footer">
+            <p className="dna-save-message">{message}</p>
+          </footer>
+        )}
       </div>
     </div>
   )

@@ -5,7 +5,9 @@ import {
   copyGenomeToClipboard,
   downloadGenomeFile,
   geneArrayToDna,
+  saveToGenomeLibrary,
 } from '../sim/dnaExport'
+import { cloneSavedGenome } from '../sim/creatureEditor'
 import { expressCreatureTraits } from '../sim/phenotype'
 import { formatYears } from '../sim/timeScale'
 import { DnaAvatar } from './CreatureAvatar'
@@ -226,6 +228,19 @@ export function ChampionModal({ open, champion, onClose }: ChampionModalProps) {
               <button
                 type="button"
                 className="settings-primary"
+                onClick={() => {
+                  const saved = cloneSavedGenome(champion.genome, {
+                    id: `genome-${Date.now()}`,
+                    name: champion.genome.name,
+                  })
+                  saveToGenomeLibrary(saved)
+                  flash(`Saved “${saved.name}” to your library`)
+                }}
+              >
+                Save to library
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   downloadGenomeFile(champion.genome)
                   flash('Downloaded DNA file')

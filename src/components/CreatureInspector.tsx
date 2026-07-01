@@ -1,7 +1,7 @@
 import { CreatureAvatar } from './CreatureAvatar'
 import { ExpressedTraitsList } from './ExpressedTraitsList'
 import { GenomeDnaTable } from './GenomeDnaTable'
-import { creatureTraits, hungryEnterLine, hungryExitLine } from '../sim/entities/creature'
+import { creatureTraits, hungryEnterLine, hungryExitLine, thirstyEnterLine, thirstyExitLine } from '../sim/entities/creature'
 import {
   copyGenomeToClipboard,
   creatureToSavedGenome,
@@ -16,7 +16,7 @@ import type { Creature } from '../sim/types'
 import { useState } from 'react'
 
 type CreatureInspectorProps = {
-  creature: Creature | null
+  creature: Creature
   onClose: () => void
   onEditInDesigner?: (creature: Creature) => void
 }
@@ -30,18 +30,11 @@ export function CreatureInspector({ creature, onClose, onEditInDesigner }: Creat
   const [message, setMessage] = useState<string | null>(null)
   const [library, setLibrary] = useState<SavedGenome[]>(() => loadSavedGenomeLibrary())
 
-  if (!creature) {
-    return (
-      <section className="creature-inspector empty">
-        <h2>Creature inspector</h2>
-        <p className="hint">Click a creature on the map to inspect its DNA and stats.</p>
-      </section>
-    )
-  }
-
   const traits = creatureTraits(creature)
   const hungryAt = hungryEnterLine(creature)
   const satedAt = hungryExitLine(creature)
+  const thirstyAt = thirstyEnterLine(creature)
+  const hydratedAt = thirstyExitLine(creature)
   const defaultName = `Champion #${creature.id}`
 
   const flash = (text: string) => {
@@ -108,12 +101,26 @@ export function CreatureInspector({ creature, onClose, onEditInDesigner }: Creat
           </dd>
         </div>
         <div>
+          <dt>Hydration</dt>
+          <dd>
+            {fmt(creature.hydration)} / {fmt(traits.maxHydration, 0)}
+          </dd>
+        </div>
+        <div>
           <dt>Hungry below</dt>
           <dd>{fmt(hungryAt)}</dd>
         </div>
         <div>
           <dt>Sated above</dt>
           <dd>{fmt(satedAt)}</dd>
+        </div>
+        <div>
+          <dt>Thirsty below</dt>
+          <dd>{fmt(thirstyAt)}</dd>
+        </div>
+        <div>
+          <dt>Hydrated above</dt>
+          <dd>{fmt(hydratedAt)}</dd>
         </div>
         <div>
           <dt>Fatigue</dt>
@@ -155,6 +162,21 @@ export function CreatureInspector({ creature, onClose, onEditInDesigner }: Creat
               : 'None'}
           </dd>
         </div>
+        {traits.memorySlots > 0 && (
+          <div>
+            <dt>Memories</dt>
+            <dd>
+              {creature.memories && creature.memories.length > 0
+                ? creature.memories
+                    .map((memory) => {
+                      const label = memory.kind === 'water' ? 'Water' : 'Food'
+                      return `${label} ${fmt(memory.strength * 100, 0)}% @ (${fmt(memory.x, 0)}, ${fmt(memory.y, 0)})`
+                    })
+                    .join(' · ')
+                : 'None yet'}
+            </dd>
+          </div>
+        )}
       </dl>
 
       <h3>Expressed traits</h3>

@@ -1,3 +1,4 @@
+import { markPendingDeathCause } from './deathCause'
 import {
   creatureTraits,
   toroidalDelta,
@@ -134,6 +135,7 @@ export function tryEatCreature(hunter: Creature, prey: Creature): number {
 
   const bite = Math.min(traits.biteAmount * traits.forageEfficiency, prey.energy)
   prey.energy -= bite
+  markPendingDeathCause(prey, 'predation')
   return bite
 }
 

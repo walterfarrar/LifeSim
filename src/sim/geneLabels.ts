@@ -54,6 +54,8 @@ export const HERBIVORE_GENE_LABELS: Record<number, string> = {
   [HerbivoreGene.CourtshipEagerness]: 'Courtship eagerness',
   [HerbivoreGene.CloseMateLeniency]: 'Close mate leniency',
   [HerbivoreGene.Cohesion]: 'Cohesion',
+  [HerbivoreGene.WaterSource]: 'Water source',
+  [HerbivoreGene.Memory]: 'Memory',
 }
 
 /** Plain-language effect of each herbivore gene — shown in the creature editor. */
@@ -111,6 +113,10 @@ export const HERBIVORE_GENE_DESCRIPTIONS: Record<number, string> = {
   [HerbivoreGene.CourtshipEagerness]: 'How sated the creature must be before seeking mates. Higher = enters horny mode sooner after eating.',
   [HerbivoreGene.CloseMateLeniency]: 'Relaxes mate pickiness when a partner is already within physical mate range.',
   [HerbivoreGene.Cohesion]: 'Pull toward nearby genetically similar creatures — drifts with the herd instead of wandering alone.',
+  [HerbivoreGene.WaterSource]:
+    'Where the creature hydrates: low = pond, high = plant forage (tissue water in bites). Affects thirsty movement and drinking.',
+  [HerbivoreGene.Memory]:
+    'Spatial recall for water and food. Low = forgets quickly and wanders blindly; high = remembers pond shores and rich foraging patches and returns when thirsty or hungry.',
 }
 
 export const PLANT_GENE_LABELS: Record<number, string> = {
@@ -121,15 +127,19 @@ export const PLANT_GENE_LABELS: Record<number, string> = {
   [PlantGene.GrowthRate]: 'Growth rate',
   [PlantGene.SpreadMin]: 'Spread min',
   [PlantGene.SpreadMax]: 'Spread max',
-  [PlantGene.Maturation]: 'Maturation',
+  [PlantGene.Maturation]: 'Maturation age — also affects maximum lifespan.',
   [PlantGene.Reproduction]: 'Reproduction',
   [PlantGene.BaseRadius]: 'Base radius',
   [PlantGene.MutationRate]: 'Mutation rate',
   [PlantGene.MutationAmount]: 'Mutation amount',
-  [PlantGene.Hardiness]: 'Hardiness',
+  [PlantGene.Hardiness]: 'Drought tolerance and lifespan — tougher plants wilt slower and live longer.',
   [PlantGene.LeafLobes]: 'Leaf lobes',
   [PlantGene.LeafPointiness]: 'Leaf pointiness',
   [PlantGene.Kind]: 'Lineage kind',
+  [PlantGene.MoistureNeed]: 'Moisture need',
+  [PlantGene.TempPreference]: 'Temp preference',
+  [PlantGene.TempGrowthRange]: 'Temp growth range',
+  [PlantGene.TempSurvivalRange]: 'Temp survival margin',
 }
 
 export const PATHOGEN_GENE_LABELS: Record<number, string> = {
