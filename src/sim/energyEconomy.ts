@@ -1,5 +1,7 @@
 import type { Corpse, Creature, Plant } from './types'
 
+import { GRASS_FOOD_EFFICIENCY } from './config'
+
 /** Share of plant biomass converted to usable creature energy (rest is waste heat). */
 export const PLANT_TROPHIC_EFFICIENCY = 0.34
 
@@ -24,6 +26,11 @@ export interface WorldEnergyTotals extends EnergyBreakdown {
 export function energyFromPlantBiomass(rawBiomass: number, forageEfficiency: number): number {
   const digestibility = 0.55 + forageEfficiency * 0.45
   return rawBiomass * PLANT_TROPHIC_EFFICIENCY * digestibility
+}
+
+/** Grass is fibrous filler — much lower yield than bushes or trees. */
+export function energyFromGrassBiomass(rawBiomass: number, forageEfficiency: number): number {
+  return energyFromPlantBiomass(rawBiomass, forageEfficiency) * GRASS_FOOD_EFFICIENCY
 }
 
 export function energyFromCorpseBiomass(rawBiomass: number, forageEfficiency: number): number {

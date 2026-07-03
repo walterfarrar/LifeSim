@@ -4,6 +4,8 @@ import type { DNA } from './dna'
 import type { Infection, Pathogen } from './disease/pathogen'
 import type { CreatureShape, HerbivoreTraits } from './genes'
 import type { SoilMoistureSnapshot } from './soilMoisture'
+import type { GrassCoverSnapshot } from './grassCover'
+import type { TerrainWaterSnapshot } from './terrainWater'
 import type { DeathCauseCounts } from './deathCause'
 import type { SeasonName } from './seasons'
 
@@ -48,16 +50,6 @@ export interface Corpse {
   radius: number
 }
 
-export interface Pond {
-  kind: 'pond'
-  id: number
-  x: number
-  y: number
-  water: number
-  maxWater: number
-  baseRadius: number
-}
-
 export interface Creature {
   kind: 'creature'
   id: number
@@ -97,7 +89,7 @@ export interface Creature {
   pendingDeathCause?: CreatureDeathCause
 }
 
-export type SimEntity = Plant | Creature | Corpse | Pond
+export type SimEntity = Plant | Creature | Corpse
 
 export interface WorldStats {
   tick: number
@@ -113,8 +105,9 @@ export interface WorldStats {
   grassPlantCount: number
   bushPlantCount: number
   treePlantCount: number
-  pondWater: number
-  hasPond: boolean
+  /** Total water units in surface pools (terrain depressions). */
+  surfaceWater: number
+  hasSurfaceWater: boolean
   /** Total water units in atmospheric vapor. */
   airWater: number
   /** Total water units across all soil cells. */
@@ -123,7 +116,7 @@ export interface WorldStats {
   creatureWater: number
   /** Total water stored in living plants (biomass). */
   plantWater: number
-  /** Sum of all water pools (pond + soil + air + creatures + plants). */
+  /** Sum of all water pools (surface + soil + air + creatures + plants). */
   totalWater: number
   /** Total water locked at world reset — use to spot conservation drift. */
   totalWaterBudget: number
@@ -150,8 +143,9 @@ export interface WorldSnapshot {
   plants: readonly Plant[]
   corpses: readonly Corpse[]
   creatures: readonly Creature[]
-  ponds: readonly Pond[]
+  terrain: TerrainWaterSnapshot
   soil: SoilMoistureSnapshot
+  grass: GrassCoverSnapshot
   pathogens: readonly Pathogen[]
   stats: WorldStats
 }

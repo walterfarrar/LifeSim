@@ -28,7 +28,8 @@ export const PLANT_KIND_CLIMATE: Record<
     [PlantGene.MoistureNeed]: 78,
     [PlantGene.TempPreference]: 82,
     [PlantGene.TempGrowthRange]: 215,
-    [PlantGene.TempSurvivalRange]: 248,
+    [PlantGene.TempSurvivalRange]: 252,
+    [PlantGene.Hardiness]: 242,
   },
 }
 
@@ -46,7 +47,10 @@ export function isPlantDormant(dna: DNA, season: SeasonName, temperature: number
 
   if (kind === 'grass') {
     if (season === 'winter') return true
-    return temperature < traits.idealTemp - traits.tempGrowthHalfWidth * 0.4
+    // Cold or hot — crown quiescent, not dying.
+    if (temperature <= traits.idealTemp - traits.tempGrowthHalfWidth) return true
+    if (temperature >= traits.idealTemp + traits.tempGrowthHalfWidth * 0.82) return true
+    return false
   }
 
   if (kind === 'bush') {
@@ -132,7 +136,7 @@ export function plantSeasonalReproductionScale(kind: PlantKind, season: SeasonNa
   if (kind === 'grass') {
     switch (season) {
       case 'summer':
-        return 5.5
+        return 3.2
       case 'spring':
         return 2.2
       case 'autumn':

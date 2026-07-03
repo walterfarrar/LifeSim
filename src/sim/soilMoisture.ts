@@ -1,15 +1,10 @@
 import {
-  POND_SEEP_RATE,
-  POND_SEEP_REACH,
   PLANT_WATER_PER_ENERGY,
   SOIL_CELL_SIZE,
   SOIL_CELL_WATER_CAPACITY,
   SOIL_LATERAL_DIFFUSION,
   SOIL_MOISTURE_HALF_SAT,
 } from './config'
-import { pondRadius } from './entities/pond'
-import { toroidalDelta } from './toroidal'
-import type { Pond } from './types'
 import { getWorldBounds } from './worldBounds'
 
 export type SoilMoistureSnapshot = {
@@ -134,9 +129,13 @@ export class SoilMoisture implements SoilAccess {
   }
 
   /** Evaporates water from cells; returns total water moved to atmosphere. */
-  evaporateToAtmosphere(baseRatePerCell: number): number {
+  evaporateToAtmosphere(
+    baseRatePerCell: number,
+    cellFilter?: (index: number) => boolean,
+  ): number {
     let total = 0
     for (let i = 0; i < this.values.length; i++) {
+      if (cellFilter && !cellFilter(i)) continue
       const wetness = this.values[i] / SOIL_CELL_WATER_CAPACITY
       const rate = baseRatePerCell * (0.25 + wetness * 0.75)
       const evap = Math.min(this.values[i], rate)
@@ -181,47 +180,7 @@ export class SoilMoisture implements SoilAccess {
     return applied
   }
 
-  /** Wet gradient around a pond at world start — peak at shore, tapering with distance. */
-  boostNearPond(pond: Pond, peakMoisture: number): void {
-    const waterRadius = pondRadius(pond)
-    const seepRadius = waterRadius + POND_SEEP_REACH
-    this.applyMoistureGradient(pond.x, pond.y, waterRadius, seepRadius, peakMoisture, 'raise')
-  }
-
-  /** Pond water seeps into soil — wettest at the shore, tapering with distance. */
-  seepFromPond(pond: Pond): void {
-    this.transferFromPond(pond)
-  }
-
-  /** Moves water from pond into a shore gradient; returns amount transferred. */
-  transferFromPond(pond: Pond, maxBudget?: number): number {
-    const waterRadius = pondRadius(pond)
-    if (waterRadius <= 0 || pond.water <= 0.5) return 0
-
-    const seepRadius = waterRadius + POND_SEEP_REACH
-    const budget =
-      maxBudget !== undefined
-        ? Math.min(maxBudget, pond.water - 0.5)
-        : Math.min(
-            POND_SEEP_RATE * SOIL_CELL_WATER_CAPACITY,
-            pond.water * 0.06,
-            pond.water - 0.5,
-          )
-    if (budget <= 0) return 0
-
-    const deposited = this.applyMoistureGradient(
-      pond.x,
-      pond.y,
-      waterRadius,
-      seepRadius,
-      budget,
-      'add',
-    )
-    pond.water = Math.max(0, pond.water - deposited)
-    return deposited
-  }
-
-  /** Spread moisture between neighboring cells — carries pond wetness inland. */
+  /** Spread moisture between neighboring cells. */
   tickLateralDiffusion(): number {
     if (SOIL_LATERAL_DIFFUSION <= 0) return 0
 
@@ -262,74 +221,5 @@ export class SoilMoisture implements SoilAccess {
   averageMoisture(): number {
     if (this.values.length === 0) return 0
     return this.totalWater() / (this.values.length * SOIL_CELL_WATER_CAPACITY)
-  }
-
-  /**
-   * Distance-weighted moisture from a pond — 1 at the water's edge, 0 at seepRadius.
-   * Cells inside the pond use the shore value so the bank stays the wettest band.
-   */
-  private pondMoistureFalloff(dist: number, waterRadius: number, seepRadius: number): number {
-    if (seepRadius <= waterRadius) return dist <= waterRadius ? 1 : 0
-    const shoreDist = Math.max(waterRadius, dist)
-    if (shoreDist >= seepRadius) return 0
-    const t = (shoreDist - waterRadius) / (seepRadius - waterRadius)
-    return (1 - t) * (1 - t)
-  }
-
-  private applyMoistureGradient(
-    x: number,
-    y: number,
-    waterRadius: number,
-    seepRadius: number,
-    amount: number,
-    mode: 'add' | 'raise',
-  ): number {
-    const baseCx = Math.floor(x / this.cellSize)
-    const baseCy = Math.floor(y / this.cellSize)
-    const cellReach = Math.ceil(seepRadius / this.cellSize) + 1
-
-    let falloffSum = 0
-    const cells: { idx: number; falloff: number }[] = []
-
-    for (let dr = -cellReach; dr <= cellReach; dr++) {
-      for (let dc = -cellReach; dc <= cellReach; dc++) {
-        const cy = this.wrap(baseCy + dr, this.rows)
-        const cx = this.wrap(baseCx + dc, this.cols)
-        const cellX = cx * this.cellSize + this.cellSize * 0.5
-        const cellY = cy * this.cellSize + this.cellSize * 0.5
-        const { dx, dy } = toroidalDelta({ x: cellX, y: cellY }, { x, y })
-        const dist = Math.hypot(dx, dy)
-        if (dist > seepRadius) continue
-
-        const falloff = this.pondMoistureFalloff(dist, waterRadius, seepRadius)
-        if (falloff <= 0) continue
-
-        const idx = cy * this.cols + cx
-        cells.push({ idx, falloff })
-        falloffSum += falloff
-      }
-    }
-
-    if (cells.length === 0 || falloffSum <= 0) return 0
-
-    let appliedTotal = 0
-    for (const { idx, falloff } of cells) {
-      const weight = falloff / falloffSum
-      if (mode === 'add') {
-        const add = amount * weight
-        const room = SOIL_CELL_WATER_CAPACITY - this.values[idx]
-        const applied = Math.min(room, add)
-        this.values[idx] += applied
-        appliedTotal += applied
-      } else {
-        const target = amount * falloff * SOIL_CELL_WATER_CAPACITY
-        if (target > this.values[idx]) {
-          appliedTotal += target - this.values[idx]
-          this.values[idx] = target
-        }
-      }
-    }
-
-    return appliedTotal
   }
 }

@@ -82,7 +82,7 @@ const PLANT_KIND_ORDER: readonly PlantKind[] = ['grass', 'bush', 'tree']
 const PLANT_KIND_BUDGET_WEIGHTS: Record<PlantKind, readonly number[]> = {
   grass: [0.55, 2.5, 2.8, 3.0, 0.45, 3.0, 0.35, 1.05, 0.12],
   bush: [1.1, 1.05, 1.0, 1.05, 0.85, 1.15, 1.45, 1.25, 0.45],
-  tree: [2.4, 0.85, 0.38, 0.42, 1.1, 0.38, 3.4, 1.35, 0.42],
+  tree: [2.4, 0.85, 0.38, 0.42, 1.1, 0.38, 3.4, 2.1, 0.42],
 }
 
 const PLANT_KIND_COSMETICS: Record<

@@ -72,6 +72,47 @@ export type GroupSpawn = {
   position: Vec2
 }
 
+export function createSingleGroupPopulation(
+  rng: Rng,
+  groupIndex: number,
+  totalGroups: number,
+  herbivoresPerGroup: number,
+  founderSettings: FounderSettings,
+  groupFounderDna?: (DNA | null)[],
+  sexIndexOffset = 0,
+): GroupSpawn[] {
+  const spawns: GroupSpawn[] = []
+  const cols = Math.ceil(Math.sqrt(totalGroups))
+  const rows = Math.ceil(totalGroups / cols)
+
+  const bounds = getWorldBounds()
+  const groupSpread = Math.min(75, Math.max(40, Math.min(bounds.width, bounds.height) * 0.04))
+
+  const savedFounder = groupFounderDna?.[groupIndex]
+  const founder = savedFounder ? cloneDNA(savedFounder) : createFounderGroupDNA(rng, groupIndex, totalGroups)
+  const row = Math.floor(groupIndex / cols)
+  const col = groupIndex % cols
+  const centerX = (bounds.width / (cols + 1)) * (col + 1)
+  const centerY = (bounds.height / (rows + 1)) * (row + 1)
+
+  for (let i = 0; i < herbivoresPerGroup; i++) {
+    const dna = i === 0 ? cloneDNA(founder) : createFounderVariantDNA(rng, founder, founderSettings)
+    const sexIndex = sexIndexOffset + i
+    dna[HerbivoreGene.SexExpression] =
+      sexIndex % 2 === 0 ? rng.int(20, 120) : rng.int(135, 235)
+
+    spawns.push({
+      dna,
+      position: {
+        x: centerX + rng.range(-groupSpread, groupSpread),
+        y: centerY + rng.range(-groupSpread, groupSpread),
+      },
+    })
+  }
+
+  return spawns
+}
+
 export function createMultiGroupPopulation(
   rng: Rng,
   groupCount: number,
@@ -80,35 +121,18 @@ export function createMultiGroupPopulation(
   groupFounderDna?: (DNA | null)[],
 ): GroupSpawn[] {
   const spawns: GroupSpawn[] = []
-  const cols = Math.ceil(Math.sqrt(groupCount))
-  const rows = Math.ceil(groupCount / cols)
-
-  const bounds = getWorldBounds()
-  const groupSpread = Math.min(75, Math.max(40, Math.min(bounds.width, bounds.height) * 0.04))
-
   for (let group = 0; group < groupCount; group++) {
-    const savedFounder = groupFounderDna?.[group]
-    const founder = savedFounder ? cloneDNA(savedFounder) : createFounderGroupDNA(rng, group, groupCount)
-    const row = Math.floor(group / cols)
-    const col = group % cols
-    const centerX = (bounds.width / (cols + 1)) * (col + 1)
-    const centerY = (bounds.height / (rows + 1)) * (row + 1)
-
-    for (let i = 0; i < herbivoresPerGroup; i++) {
-      const dna = i === 0 ? cloneDNA(founder) : createFounderVariantDNA(rng, founder, founderSettings)
-      const sexIndex = spawns.length
-      dna[HerbivoreGene.SexExpression] =
-        sexIndex % 2 === 0 ? rng.int(20, 120) : rng.int(135, 235)
-
-      spawns.push({
-        dna,
-        position: {
-          x: centerX + rng.range(-groupSpread, groupSpread),
-          y: centerY + rng.range(-groupSpread, groupSpread),
-        },
-      })
-    }
+    spawns.push(
+      ...createSingleGroupPopulation(
+        rng,
+        group,
+        groupCount,
+        herbivoresPerGroup,
+        founderSettings,
+        groupFounderDna,
+        group * herbivoresPerGroup,
+      ),
+    )
   }
-
   return spawns
 }

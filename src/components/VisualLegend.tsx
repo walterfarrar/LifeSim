@@ -148,12 +148,12 @@ export function VisualLegend() {
           </div>
 
           <div className="legend-section">
-            <h3>Selected creature</h3>
+            <h3>Inspect mode</h3>
             <ul className="legend-list">
-              <LegendItem label="Selection" detail="Click a creature to inspect">
+              <LegendItem label="Creature / Plant / Soil" detail="Pick a mode on the map, then click to inspect">
                 <CircleSwatch color={VISUAL_THEME.selectionRing} />
               </LegendItem>
-              <LegendItem label="Personal space" detail="Dashed; size from DNA">
+              <LegendItem label="Personal space" detail="Shown on selected creatures only">
                 <CircleSwatch color={VISUAL_THEME.personalSpaceRing} dashed wide />
               </LegendItem>
               <LegendItem label="Attack reach" detail="Aggressive creatures only">
@@ -165,7 +165,7 @@ export function VisualLegend() {
           <div className="legend-section">
             <h3>Plant lineages</h3>
             <ul className="legend-list">
-              <LegendItem label="Grass" detail="Thin blades; spreads fast in summer, dormant in winter">
+              <LegendItem label="Grass turf" detail="Middle layer on soil — one strain per tile; spreads to neighbors">
                 <span className="legend-plant-grass" aria-hidden />
               </LegendItem>
               <LegendItem label="Deciduous" detail="Low lumpy shrubs; active spring–autumn, dormant in winter">
@@ -192,10 +192,10 @@ export function VisualLegend() {
               <LegendItem label="Corpse" detail="Dead creature; scavenged or decays away">
                 <CircleSwatch color={VISUAL_THEME.corpseSample} filled />
               </LegendItem>
-              <LegendItem label="Pond" detail="Fresh water at the shore; submerged creatures and plants drown">
+              <LegendItem label="Surface water" detail="Top layer over grass — darker blue in low, full tiles; shallow film still stresses turf">
                 <CircleSwatch color={VISUAL_THEME.pondSample} filled wide />
               </LegendItem>
-              <LegendItem label="Soil moisture" detail="Wettest at the pond shore, tapering inland; plants drink from local soil">
+              <LegendItem label="Soil moisture" detail="Bottom layer — moisture in the soil column; surface water infiltrates over time">
                 <span className="legend-soil-swatch" aria-hidden>
                   <span className="legend-soil-dry" style={{ backgroundColor: VISUAL_THEME.soilDrySample }} />
                   <span className="legend-soil-wet" style={{ backgroundColor: VISUAL_THEME.soilWetSample }} />
@@ -208,20 +208,20 @@ export function VisualLegend() {
                   <span className="legend-temp-hot" />
                 </span>
               </LegendItem>
-              <LegendItem label="Day & night" detail="Window border color shifts by season and darkens at night">
+              <LegendItem label="Day & night" detail="Window frame (outside→in): season at edge, time of day (blue night / orange dawn-dusk / yellow day), rain when wet">
                 <span className="legend-day-night" aria-hidden>
                   <span className="legend-day-half" />
                   <span className="legend-night-half" />
                 </span>
               </LegendItem>
-              <LegendItem label="Rain" detail="Refills soil and tops up the pond (see stats panel)">
+              <LegendItem label="Rain" detail="Refills soil and fills low terrain depressions (see stats panel)">
                 <CircleSwatch color="rgba(100, 160, 220, 0.6)" filled wide />
               </LegendItem>
             </ul>
           </div>
 
           <p className="legend-footnote">
-            Space pauses · Click creature to inspect · ⚙ for start settings
+            Space pauses · Pick inspect mode · Click map to inspect · Esc closes panel · ⚙ for start settings
           </p>
 
           <footer className="legend-panel-footer">

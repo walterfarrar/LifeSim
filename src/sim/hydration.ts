@@ -1,30 +1,20 @@
 import { creatureTraits } from './entities/creature'
-import { isPondDrinkable } from './entities/pond'
 import { plantStoredWater } from './waterCycle'
 import { toroidalDistance } from './toroidal'
-import type { Creature, Plant, Pond } from './types'
+import type { Creature, Plant } from './types'
+import type { SurfaceWaterTarget, TerrainWater } from './terrainWater'
 
-/** Nearest drinkable pond within seek range. */
-export function findBestPondTarget(
+/** Nearest standing surface water within seek range. */
+export function findBestSurfaceWaterTarget(
   creature: Creature,
-  ponds: readonly Pond[],
+  terrain: TerrainWater,
   seekRange: number,
-): Pond | null {
-  let best: Pond | null = null
-  let bestDist = Infinity
-
-  for (const pond of ponds) {
-    if (!isPondDrinkable(pond)) continue
-    const dist = toroidalDistance(creature, pond)
-    if (dist >= seekRange) continue
-    if (dist < bestDist) {
-      bestDist = dist
-      best = pond
-    }
-  }
-
-  return best
+): SurfaceWaterTarget | null {
+  return terrain.findBestSurfaceTarget(creature.x, creature.y, seekRange)
 }
+
+/** @deprecated Use findBestSurfaceWaterTarget */
+export const findBestPondTarget = findBestSurfaceWaterTarget
 
 /** Nearest edible plant with tissue water, for thirsty foraging. */
 export function findBestPlantWaterTarget(
@@ -51,10 +41,20 @@ export function findBestPlantWaterTarget(
   return best
 }
 
-export function plantWaterScore(plant: Plant, dist: number, seekRange: number): number {
+export function plantWaterScore(
+  plant: Plant,
+  dist: number,
+  seekRange: number,
+  forageWaterPreference: number,
+): number {
   const water = plantStoredWater(plant)
-  if (water <= 0 || plant.energy <= 0.5) return 0
-  return water / (1 + dist / Math.max(seekRange, 1))
+  if (water <= 0 || plant.energy <= 0.5 || forageWaterPreference <= 0) return 0
+  return (water * forageWaterPreference) / (1 + dist / Math.max(seekRange, 1))
+}
+
+export function surfaceWaterScore(dist: number, seekRange: number, pondDrinking: number): number {
+  if (pondDrinking <= 0) return 0
+  return pondDrinking / (1 + dist / Math.max(seekRange, 1))
 }
 
 export function pondWaterScore(
@@ -63,6 +63,5 @@ export function pondWaterScore(
   seekRange: number,
 ): number {
   const traits = creatureTraits(creature)
-  if (traits.pondDrinking <= 0) return 0
-  return traits.pondDrinking / (1 + dist / Math.max(seekRange, 1))
+  return surfaceWaterScore(dist, seekRange, traits.pondDrinking)
 }

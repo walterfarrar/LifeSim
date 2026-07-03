@@ -114,7 +114,7 @@ export const HERBIVORE_GENE_DESCRIPTIONS: Record<number, string> = {
   [HerbivoreGene.CloseMateLeniency]: 'Relaxes mate pickiness when a partner is already within physical mate range.',
   [HerbivoreGene.Cohesion]: 'Pull toward nearby genetically similar creatures — drifts with the herd instead of wandering alone.',
   [HerbivoreGene.WaterSource]:
-    'Where the creature hydrates: low = pond, high = plant forage (tissue water in bites). Affects thirsty movement and drinking.',
+    'Where the creature hydrates: low = pond, high = grass dew and plant forage. Affects thirsty movement and drinking.',
   [HerbivoreGene.Memory]:
     'Spatial recall for water and food. Low = forgets quickly and wanders blindly; high = remembers pond shores and rich foraging patches and returns when thirsty or hungry.',
 }

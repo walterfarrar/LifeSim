@@ -14,6 +14,37 @@ export type CreatureMemory = {
 
 const MERGE_RADIUS = 48
 
+export function forgetCreatureMemoryNear(
+  creature: Creature,
+  kind: CreatureMemoryKind,
+  x: number,
+  y: number,
+  radius = MERGE_RADIUS,
+): void {
+  if (!creature.memories?.length) return
+  creature.memories = creature.memories.filter((memory) => {
+    if (memory.kind !== kind) return true
+    return toroidalDistance(memory, { x, y }) >= radius
+  })
+}
+
+export function weakenCreatureMemoryNear(
+  creature: Creature,
+  kind: CreatureMemoryKind,
+  x: number,
+  y: number,
+  amount: number,
+  radius = MERGE_RADIUS,
+): void {
+  if (!creature.memories?.length) return
+  for (const memory of creature.memories) {
+    if (memory.kind !== kind) continue
+    if (toroidalDistance(memory, { x, y }) >= radius) continue
+    memory.strength = Math.max(0, memory.strength - amount)
+  }
+  creature.memories = creature.memories.filter((memory) => memory.strength > 0.035)
+}
+
 function hasMemory(traits: HerbivoreTraits): boolean {
   return traits.memorySlots > 0
 }

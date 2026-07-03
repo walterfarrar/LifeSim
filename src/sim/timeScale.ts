@@ -8,6 +8,10 @@ export function ticksToYears(ticks: number): number {
   return ticks / TICKS_PER_YEAR
 }
 
+export function yearsToTicks(years: number): number {
+  return years * TICKS_PER_YEAR
+}
+
 /** Format tick counts as in-world years for display. */
 export function formatYears(ticks: number, digits = 1): string {
   const years = ticksToYears(ticks)

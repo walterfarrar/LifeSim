@@ -94,8 +94,10 @@ export function expressHerbivore(dna: DNA): HerbivoreTraits {
     courtshipEagerness: 0.12 + g(HerbivoreGene.CourtshipEagerness) * 0.58,
     closeMateLeniency: 0.15 + g(HerbivoreGene.CloseMateLeniency) * 0.7,
     cohesion: g(HerbivoreGene.Cohesion),
+    /** Low WaterSource gene → pond; high → grass dew and plant tissue water. */
+    forageWaterPreference: g(HerbivoreGene.WaterSource),
     soilDrinking: 0,
-    pondDrinking: Math.max(0, Math.min(1, 1 - Math.max(0, (0.5 - g(HerbivoreGene.WaterSource)) * 2))),
+    pondDrinking: 1 - g(HerbivoreGene.WaterSource),
     memorySlots: Math.floor(g(HerbivoreGene.Memory) * 6.5),
     memoryDecay: 0.0016 * (1.3 - g(HerbivoreGene.Memory) * 0.95),
     memoryRecall: 0.06 + g(HerbivoreGene.Memory) * 0.9,

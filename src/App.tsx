@@ -4,6 +4,8 @@ import { CreatureEditorModal } from './components/CreatureEditorModal'
 import { SimulationCanvas } from './components/SimulationCanvas'
 import { StatsPanel } from './components/StatsPanel'
 import { CreatureInspector } from './components/CreatureInspector'
+import { PlantInspector } from './components/PlantInspector'
+import { SoilInspector } from './components/SoilInspector'
 import { SettingsModal } from './components/SettingsModal'
 import {
   AUTO_CHAMPION_CHECK_INTERVAL,
@@ -35,6 +37,11 @@ import {
   settingsRunKey,
 } from './sim/simSettings'
 import type { WorldSnapshot } from './sim/types'
+import type { InspectMode, MapSelection } from './sim/mapSelection'
+import { selectionMatchesMode } from './sim/mapSelection'
+import { plantKindFromDna } from './sim/plantKinds'
+import { SOIL_CELL_WATER_CAPACITY } from './sim/config'
+import { soilCellAt } from './components/soilHitTest'
 import { clampSpeedMultiplier } from './sim/timeScale'
 import './App.css'
 
@@ -51,7 +58,8 @@ function App() {
   const [activeSettings, setActiveSettings] = useState(loadSimSettings)
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null)
   const [maxTickReached, setMaxTickReached] = useState(0)
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [inspectMode, setInspectMode] = useState<InspectMode>('creature')
+  const [selection, setSelection] = useState<MapSelection | null>(null)
   const [autoChampion, setAutoChampion] = useState<AutoChampionRecord | null>(() => loadAutoChampionRecord())
   const [autoPlantChampion, setAutoPlantChampion] = useState<AutoPlantChampionRecord | null>(() =>
     loadAutoPlantChampionRecord(),
@@ -94,14 +102,14 @@ function App() {
       setSeed(Date.now())
     }
     setRunId((id) => id + 1)
-    setSelectedId(null)
+    setSelection(null)
     setMaxTickReached(0)
     setPaused(false)
     setSettingsOpen(false)
   }, [draftSettings])
 
   useEffect(() => {
-    setSelectedId(null)
+    setSelection(null)
     setAutoChampion(loadAutoChampionRecord())
     setAutoPlantChampion(loadAutoPlantChampionRecord())
     setAutoPathogenChampion(loadAutoPathogenChampionRecord())
@@ -145,13 +153,29 @@ function App() {
   }, [snapshot, seed, paused])
 
   useEffect(() => {
-    if (selectedId === null) return
-    const stillAlive = snapshot?.creatures.some((creature) => creature.id === selectedId)
-    if (snapshot && !stillAlive) setSelectedId(null)
-  }, [snapshot, selectedId])
+    if (!selection || !snapshot) return
+    if (selection.type === 'creature') {
+      const stillAlive = snapshot.creatures.some((creature) => creature.id === selection.id)
+      if (!stillAlive) setSelection(null)
+      return
+    }
+    if (selection.type === 'plant') {
+      const stillAlive = snapshot.plants.some((plant) => plant.id === selection.id)
+      if (!stillAlive) setSelection(null)
+    }
+  }, [snapshot, selection])
+
+  const handleInspectModeChange = useCallback((mode: InspectMode) => {
+    setInspectMode(mode)
+    setSelection((current) => (selectionMatchesMode(current, mode) ? current : null))
+  }, [])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Escape' && selection) {
+        setSelection(null)
+        return
+      }
       if (event.code === 'Escape' && editorOpen) {
         setEditorOpen(false)
         return
@@ -173,10 +197,35 @@ function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen, hallOpen, editorOpen])
+  }, [settingsOpen, hallOpen, editorOpen, selection])
 
   const selectedCreature =
-    snapshot?.creatures.find((creature) => creature.id === selectedId) ?? null
+    selection?.type === 'creature'
+      ? (snapshot?.creatures.find((creature) => creature.id === selection.id) ?? null)
+      : null
+
+  const selectedPlant =
+    selection?.type === 'plant'
+      ? (snapshot?.plants.find((plant) => plant.id === selection.id) ?? null)
+      : null
+
+  const selectedPlantSoilMoisture =
+    selectedPlant && snapshot
+      ? snapshot.soil.values[soilCellAt(snapshot.soil, selectedPlant.x, selectedPlant.y).index] /
+        SOIL_CELL_WATER_CAPACITY
+      : 0
+
+  const selectedSoilWoodyPlantCount =
+    selection?.type === 'soil' && snapshot
+      ? snapshot.plants.filter((plant) => {
+          const cell = soilCellAt(snapshot.soil, plant.x, plant.y)
+          return (
+            cell.col === selection.col &&
+            cell.row === selection.row &&
+            plantKindFromDna(plant.dna) !== 'grass'
+          )
+        }).length
+      : 0
 
   const stats = snapshot?.stats ?? {
     tick: 0,
@@ -192,8 +241,8 @@ function App() {
     grassPlantCount: 0,
     bushPlantCount: 0,
     treePlantCount: 0,
-    pondWater: 0,
-    hasPond: false,
+    surfaceWater: 0,
+    hasSurfaceWater: false,
     airWater: 0,
     soilWater: 0,
     creatureWater: 0,
@@ -250,18 +299,40 @@ function App() {
           speedMultiplier={speedMultiplier}
           seed={seed}
           settings={activeSettings}
-          selectedId={selectedId}
+          inspectMode={inspectMode}
+          selection={selection}
           onSnapshot={onSnapshot}
-          onSelectCreature={setSelectedId}
+          onSelect={setSelection}
+          onInspectModeChange={handleInspectModeChange}
         />
         {selectedCreature && (
           <CreatureInspector
             creature={selectedCreature}
-            onClose={() => setSelectedId(null)}
+            onClose={() => setSelection(null)}
             onEditInDesigner={(creature) => {
               setEditorGenome(creatureToSavedGenome(creature))
               setEditorOpen(true)
             }}
+          />
+        )}
+        {selectedPlant && snapshot && (
+          <PlantInspector
+            plant={selectedPlant}
+            soilMoisture={selectedPlantSoilMoisture}
+            temperature={snapshot.stats.temperature}
+            season={snapshot.stats.season}
+            onClose={() => setSelection(null)}
+          />
+        )}
+        {selection?.type === 'soil' && snapshot && (
+          <SoilInspector
+            col={selection.col}
+            row={selection.row}
+            soil={snapshot.soil}
+            terrain={snapshot.terrain}
+            grass={snapshot.grass}
+            woodyPlantCount={selectedSoilWoodyPlantCount}
+            onClose={() => setSelection(null)}
           />
         )}
       </div>

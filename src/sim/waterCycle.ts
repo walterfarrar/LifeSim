@@ -5,13 +5,10 @@ import {
   DEFAULT_WORLD_WIDTH,
   DEATH_WATER_TO_AIR,
   DEATH_WATER_TO_SOIL,
-  POND_EVAP_BASE,
   SURFACE_EVAPORATION_SCALE,
   RAIN_ARM_HUMIDITY,
-  RAIN_POND_FRACTION,
   RAIN_PRECIP_BASE,
   RAIN_PRECIP_FRACTION,
-  RAIN_SOIL_FRACTION,
   RAIN_START_HUMIDITY,
   RAIN_STOP_HUMIDITY,
   REFERENCE_WORLD_AREA,
@@ -20,14 +17,24 @@ import {
   SOIL_SATURATED_EVAP_BOOST,
   SOIL_SATURATED_MOISTURE,
 } from './config'
-import type { Creature, Plant, Pond } from './types'
 import type { SoilMoisture } from './soilMoisture'
+import type { Creature, Plant } from './types'
+import type { TerrainWater } from './terrainWater'
+import { plantHydricWater } from './plantWaterUptake'
+import { releaseTranspiredWater } from './transpiration'
+
+export type { AtmospherePool } from './transpiration'
 
 /** Atmospheric vapor pool — rain runs while humidity is high until it falls to the stop level. */
 export class Atmosphere {
   vapor = 0
   raining = false
   armedForRain = true
+  readonly vaporCapacity: number
+
+  constructor(vaporCapacity = ATMOSPHERE_VAPOR_CAPACITY) {
+    this.vaporCapacity = vaporCapacity
+  }
 
   reset(initialVapor = scaledInitialVapor(DEFAULT_WORLD_WIDTH, DEFAULT_WORLD_HEIGHT)): void {
     this.vapor = initialVapor
@@ -36,7 +43,7 @@ export class Atmosphere {
   }
 
   get humidity(): number {
-    return Math.min(1.5, Math.max(0, this.vapor / ATMOSPHERE_VAPOR_CAPACITY))
+    return Math.min(1, Math.max(0, this.vapor / this.vaporCapacity))
   }
 
   get isRaining(): boolean {
@@ -44,12 +51,16 @@ export class Atmosphere {
   }
 }
 
+export function atmosphereExcessVapor(atmosphere: Atmosphere): number {
+  const stopVapor = atmosphere.vaporCapacity * RAIN_STOP_HUMIDITY
+  return Math.max(0, atmosphere.vapor - stopVapor)
+}
+
 export function scaledInitialVapor(width: number, height: number): number {
   const area = width * height
   return ATMOSPHERE_INITIAL_VAPOR * (area / REFERENCE_WORLD_AREA)
 }
 
-/** Evaporation / sweat multiplier from temperature and relative humidity (0–1+). */
 function rawSurfaceEvaporationRate(
   tempC: number,
   relativeHumidity: number,
@@ -88,42 +99,32 @@ export function plantStoredWater(plant: Plant): number {
   return Math.max(0, plant.water)
 }
 
+export function plantHydricMass(plant: Plant): number {
+  return plantHydricWater(plant)
+}
+
 export function measureTotalWater(
-  ponds: readonly Pond[],
+  terrain: TerrainWater,
   soil: SoilMoisture,
   creatures: readonly Creature[],
   plants: readonly Plant[],
   atmosphere: Atmosphere,
+  grassWater = 0,
 ): number {
   let total = atmosphere.vapor
-  for (const pond of ponds) total += pond.water
+  total += terrain.totalWater()
   total += soil.totalWater()
   for (const creature of creatures) total += creature.hydration
-  for (const plant of plants) total += plantStoredWater(plant)
+  for (const plant of plants) total += plantHydricWater(plant)
+  total += grassWater
   return total
-}
-
-export function evaporatePondsToAir(
-  ponds: readonly Pond[],
-  atmosphere: Atmosphere,
-  tempC: number,
-): void {
-  if (atmosphere.raining) return
-  const evapMult = surfaceEvaporationRate(tempC, atmosphere.humidity, false)
-  for (const pond of ponds) {
-    if (pond.water <= 0) continue
-    const fill = pond.water / Math.max(pond.maxWater, 1)
-    const rate = POND_EVAP_BASE * evapMult * (0.35 + 0.65 * Math.sqrt(fill))
-    const evap = Math.min(pond.water, rate)
-    pond.water -= evap
-    atmosphere.vapor += evap
-  }
 }
 
 export function evaporateSoilToAir(
   soil: SoilMoisture,
   atmosphere: Atmosphere,
   tempC: number,
+  terrain: TerrainWater,
 ): void {
   if (atmosphere.raining) return
   const evapMult = surfaceEvaporationRate(tempC, atmosphere.humidity, false)
@@ -133,77 +134,61 @@ export function evaporateSoilToAir(
     swampMult = 1 + (avgMoisture - SOIL_SATURATED_MOISTURE) * SOIL_SATURATED_EVAP_BOOST
   }
   const baseRate = SOIL_EVAP_BASE * SOIL_CELL_WATER_CAPACITY * evapMult * swampMult
-  atmosphere.vapor += soil.evaporateToAtmosphere(baseRate)
+  atmosphere.vapor += soil.evaporateToAtmosphere(baseRate, (idx) => terrain.surfaceWater[idx] <= 0.05)
 }
 
-/** Match the stats-panel humidity display so rain stops when the UI reads ~10%. */
 export function shouldStopRain(atmosphere: Atmosphere): boolean {
-  const humidity = atmosphere.humidity
-  const stopVapor = ATMOSPHERE_VAPOR_CAPACITY * RAIN_STOP_HUMIDITY
-  if (Math.round(humidity * 100) <= Math.round(RAIN_STOP_HUMIDITY * 100)) return true
-  if (atmosphere.vapor <= stopVapor + ATMOSPHERE_VAPOR_CAPACITY * 0.008) return true
+  if (atmosphere.humidity <= RAIN_STOP_HUMIDITY) return true
+  if (atmosphereExcessVapor(atmosphere) <= 0) return true
   return false
 }
 
 function runPrecipitation(
   atmosphere: Atmosphere,
-  soil: SoilMoisture,
-  ponds: readonly Pond[],
+  terrain: TerrainWater,
   worldWidth: number,
   worldHeight: number,
 ): number {
-  const stopVapor = ATMOSPHERE_VAPOR_CAPACITY * RAIN_STOP_HUMIDITY
-  const excess = atmosphere.vapor - stopVapor
+  const excess = atmosphereExcessVapor(atmosphere)
   if (excess <= 0) return 0
 
   const areaScale = (worldWidth * worldHeight) / REFERENCE_WORLD_AREA
-  const precip = Math.min(
-    excess,
-    Math.max(RAIN_PRECIP_BASE * areaScale, excess * RAIN_PRECIP_FRACTION),
-  )
+  const baseMin = RAIN_PRECIP_BASE * areaScale
+  const precip =
+    excess <= baseMin
+      ? excess
+      : Math.min(excess, Math.max(baseMin, excess * RAIN_PRECIP_FRACTION))
 
-  const pondWant = precip * RAIN_POND_FRACTION
-  let pondApplied = 0
-  const pondShare = pondWant / Math.max(ponds.length, 1)
-  for (const pond of ponds) {
-    const room = pond.maxWater - pond.water
-    if (room <= 0) continue
-    const add = Math.min(room, pondShare)
-    pond.water += add
-    pondApplied += add
-  }
-
-  const soilWant = precip * RAIN_SOIL_FRACTION + (pondWant - pondApplied)
-  const soilApplied = soil.receivePrecipitation(soilWant)
-  atmosphere.vapor -= pondApplied + soilApplied
-  return pondApplied + soilApplied
+  const surfaceApplied = terrain.receivePrecipitation(precip)
+  atmosphere.vapor -= surfaceApplied
+  return surfaceApplied
 }
 
-/**
- * One water-cycle step: rain first when active, evaporation only while dry,
- * then check whether a new storm should begin.
- */
 export function tickWaterCycle(
   atmosphere: Atmosphere,
   soil: SoilMoisture,
-  ponds: readonly Pond[],
+  terrain: TerrainWater,
   tempC: number,
   worldWidth: number,
   worldHeight: number,
 ): void {
   if (atmosphere.raining) {
-    const applied = runPrecipitation(atmosphere, soil, ponds, worldWidth, worldHeight)
-    if (shouldStopRain(atmosphere)) {
+    if (atmosphereExcessVapor(atmosphere) <= 0) {
       atmosphere.raining = false
-    } else if (applied < 0.5) {
-      // Ground saturated — end the shower.
+      return
+    }
+
+    const applied = runPrecipitation(atmosphere, terrain, worldWidth, worldHeight)
+    terrain.tickInfiltration(soil, true)
+    if (shouldStopRain(atmosphere) || applied < 0.5) {
       atmosphere.raining = false
     }
     return
   }
 
-  evaporatePondsToAir(ponds, atmosphere, tempC)
-  evaporateSoilToAir(soil, atmosphere, tempC)
+  atmosphere.vapor += terrain.evaporateToAir(tempC, atmosphere.humidity, false)
+  terrain.tickInfiltration(soil, false)
+  evaporateSoilToAir(soil, atmosphere, tempC, terrain)
 
   if (atmosphere.humidity < RAIN_ARM_HUMIDITY) {
     atmosphere.armedForRain = true
@@ -212,22 +197,12 @@ export function tickWaterCycle(
   if (atmosphere.armedForRain && atmosphere.humidity >= RAIN_START_HUMIDITY) {
     atmosphere.raining = true
     atmosphere.armedForRain = false
-    runPrecipitation(atmosphere, soil, ponds, worldWidth, worldHeight)
+    runPrecipitation(atmosphere, terrain, worldWidth, worldHeight)
+    terrain.tickInfiltration(soil, true)
     if (shouldStopRain(atmosphere)) {
       atmosphere.raining = false
     }
   }
-}
-
-/** @deprecated Use tickWaterCycle */
-export function tickRain(
-  atmosphere: Atmosphere,
-  soil: SoilMoisture,
-  ponds: readonly Pond[],
-  worldWidth: number,
-  worldHeight: number,
-): void {
-  tickWaterCycle(atmosphere, soil, ponds, 20, worldWidth, worldHeight)
 }
 
 export function releaseCreatureWater(
@@ -250,7 +225,7 @@ export function releasePlantWater(
   soil: SoilMoisture,
   atmosphere: Atmosphere,
 ): void {
-  const water = plantStoredWater(plant)
+  const water = plantHydricWater(plant)
   if (water <= 0) return
 
   const toSoil = water * DEATH_WATER_TO_SOIL
@@ -258,9 +233,9 @@ export function releasePlantWater(
   const soilApplied = soil.depositWater(plant.x, plant.y, toSoil)
   atmosphere.vapor += toAir + (toSoil - soilApplied)
   plant.water = 0
+  plant.energy = 0
 }
 
-/** Transpiration / drought stress — prefer local soil, overflow to air. Never destroys water. */
 export function releasePlantTranspiration(
   waterUnits: number,
   plant: Plant,
@@ -268,8 +243,7 @@ export function releasePlantTranspiration(
   atmosphere: Atmosphere,
 ): void {
   if (waterUnits <= 0) return
-  const soilApplied = soil.depositWater(plant.x, plant.y, waterUnits)
-  atmosphere.vapor += waterUnits - soilApplied
+  releaseTranspiredWater(atmosphere, soil, plant.x, plant.y, waterUnits)
 }
 
 function clamp(value: number, min: number, max: number): number {

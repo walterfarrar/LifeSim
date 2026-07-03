@@ -1,7 +1,9 @@
 import { markPendingDeathCause } from '../deathCause'
 import { cloneDNA, crossover, mutate } from '../dna'
 import { createRandomHerbivoreDNA } from '../herbivoreBudget'
+import { TREE_GRAZE_BITE_SCALE } from '../config'
 import { plantBiteEffectiveness } from '../foraging'
+import { plantKindFromDna } from '../plantKinds'
 import { expressCreatureTraits, expressSex } from '../phenotype'
 import { computeInbreedingLoad } from '../inbreeding'
 import type { Rng } from '../rng'
@@ -102,13 +104,14 @@ export function applyMetabolism(
   const traits = creatureTraits(creature)
   const metabolismScale = creature.mode === 'sleepy' ? traits.sleepMetabolismScale : 1
   creature.energy -= traits.metabolism * metabolismScale
-  const sweat = creatureSweatLoss(
+  const sweatRate = creatureSweatLoss(
     traits.thirstDehydration * metabolismScale,
     tempC,
     relativeHumidity,
     raining,
   )
-  creature.hydration = Math.max(0, creature.hydration - sweat)
+  const sweat = Math.min(creature.hydration, sweatRate)
+  creature.hydration -= sweat
   creature.age += 1
   if (creature.reproductionCooldown > 0) {
     creature.reproductionCooldown -= 1
@@ -132,6 +135,13 @@ export function hungryExitLine(creature: Creature): number {
 
 export function needsFood(creature: Creature): boolean {
   return creature.energy < hungryExitLine(creature)
+}
+
+/** Graze/browse whenever in hungry mode — not only after energy drops below the exit line. */
+export function shouldForageForFood(creature: Creature): boolean {
+  if (creature.mode === 'horny' || creature.mode === 'sleepy') return false
+  if (creature.mode === 'thirsty') return needsFood(creature)
+  return creature.mode === 'hungry'
 }
 
 export function thirstyEnterLine(creature: Creature): number {
@@ -238,8 +248,10 @@ export function tryEatPlant(creature: Creature, plant: Plant): number {
   const reach = traits.radius + traits.forageReach
   if (dist > reach) return 0
 
-  const effectiveness = plantBiteEffectiveness(traits, plantTraits(plant))
-  const bite = traits.biteAmount * effectiveness
+  const kind = plantKindFromDna(plant.dna)
+  const effectiveness = plantBiteEffectiveness(traits, plantTraits(plant), kind)
+  const biteScale = kind === 'tree' ? TREE_GRAZE_BITE_SCALE : 1
+  const bite = traits.biteAmount * effectiveness * biteScale
   return Math.min(bite, plant.energy)
 }
 

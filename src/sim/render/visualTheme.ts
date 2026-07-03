@@ -18,11 +18,11 @@ export const VISUAL_THEME = {
   plantDim: 'rgb(40, 80, 55)',
   corpseSample: 'hsl(28, 28%, 22%)',
   pondSample: 'rgba(60, 150, 230, 0.55)',
-  soilWetSample: 'rgba(40, 90, 70, 0.45)',
-  soilDrySample: 'rgba(55, 42, 28, 0.35)',
+  soilWetSample: 'rgba(54, 34, 18, 0.96)',
+  soilDrySample: 'rgba(186, 150, 98, 0.78)',
   creatureSample: 'hsl(160, 55%, 42%)',
   creatureFemaleSample: 'hsl(172, 55%, 42%)',
-  canvasBackground: '#0f1410',
+  canvasBackground: '#1a1610',
 } as const
 
 export const MODE_LABELS: Record<CreatureMode, string> = {

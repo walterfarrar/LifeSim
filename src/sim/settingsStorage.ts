@@ -12,6 +12,10 @@ import {
   MIN_PLANT_KIND_CAP,
   MAX_TOTAL_WATER,
   MIN_TOTAL_WATER,
+  POND_MAX_BASE_RADIUS,
+  POND_MAX_MAX_DEPTH,
+  POND_MIN_BASE_RADIUS,
+  POND_MIN_MAX_DEPTH,
   splitLegacyMaxPlants,
 } from './config'
 import {
@@ -90,7 +94,16 @@ function sanitizeSettings(raw: Partial<SimSettings>): SimSettings {
       1,
     ),
     pathogenFounderId: '',
-    pondBaseRadius: clamp(Math.round(raw.pondBaseRadius ?? base.pondBaseRadius), 30, 200),
+    pondBaseRadius: clamp(
+      Math.round(raw.pondBaseRadius ?? base.pondBaseRadius),
+      POND_MIN_BASE_RADIUS,
+      POND_MAX_BASE_RADIUS,
+    ),
+    pondMaxDepth: clamp(
+      Math.round(raw.pondMaxDepth ?? base.pondMaxDepth),
+      POND_MIN_MAX_DEPTH,
+      POND_MAX_MAX_DEPTH,
+    ),
     totalWater: clamp(Math.round(raw.totalWater ?? base.totalWater), MIN_TOTAL_WATER, MAX_TOTAL_WATER),
     dayLengthSeconds: clamp(
       Number(raw.dayLengthSeconds ?? base.dayLengthSeconds),

@@ -1,6 +1,6 @@
 import { creatureTraits } from './entities/creature'
-import { isEntitySubmergedInPond, isPondDrinkable } from './entities/pond'
-import type { Creature, Pond } from './types'
+import type { Creature } from './types'
+import type { TerrainWater } from './terrainWater'
 
 export type CreatureDeathCause =
   | 'oldAge'
@@ -41,7 +41,7 @@ export function markPendingDeathCause(creature: Creature, cause: CreatureDeathCa
   }
 }
 
-export function classifyDeathCause(creature: Creature, ponds: readonly Pond[]): CreatureDeathCause {
+export function classifyDeathCause(creature: Creature, terrain: TerrainWater): CreatureDeathCause {
   if (creature.pendingDeathCause) return creature.pendingDeathCause
 
   const traits = creatureTraits(creature)
@@ -49,11 +49,7 @@ export function classifyDeathCause(creature: Creature, ponds: readonly Pond[]): 
   if (creature.hydration <= 0) return 'thirst'
 
   if (creature.energy <= 0) {
-    for (const pond of ponds) {
-      if (isPondDrinkable(pond) && isEntitySubmergedInPond(pond, creature, traits.radius)) {
-        return 'drowning'
-      }
-    }
+    if (terrain.isSubmerged(creature.x, creature.y, traits.radius)) return 'drowning'
     if (creature.infection && creature.infection.severity >= 0.22) return 'disease'
     return 'starvation'
   }

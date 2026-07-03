@@ -1,4 +1,4 @@
-import { createMultiGroupPopulation } from './dna'
+import { createSingleGroupPopulation } from './dna'
 import {
   createInitialPathogens,
   createPathogenFromChampionDna,
@@ -33,6 +33,7 @@ import {
   mate,
   mateProximity,
   moveToward,
+  shouldForageForFood,
   needsFood,
   needsWater,
   resetCreatureIds,
@@ -50,7 +51,6 @@ import {
 } from './entities/corpse'
 import {
   foragePlantBite,
-  createPlant,
   createPlantNear,
   createPlantWithDna,
   growPlant,
@@ -59,9 +59,9 @@ import {
   applyPlantOldAge,
   applyPlantDrought,
   isPlantEdible,
-  absorbPlantWaterFromSoil,
   transferPlantSeedWater,
   plantPopulationSpawnAttempts,
+  plantDrownDamage,
   plantRadius,
   plantReproductionChance,
   pickPlantForReproduction,
@@ -69,13 +69,11 @@ import {
   resetPlantIds,
 } from './entities/plant'
 import {
-  createPond,
   isPondDrinkable,
   applyCreatureDrowning,
   applyPlantDrowning,
   pondApproachTarget,
-  resetPondIds,
-  tryDrinkFromPond,
+  tryDrinkFromSurface,
 } from './entities/pond'
 import {
   isMateSearchTarget,
@@ -85,7 +83,17 @@ import {
 } from './matePreference'
 import { applySpaceReaction, evaluateSpaceReaction } from './spaceBehavior'
 import { findCohesionTarget } from './cohesion'
-import { findBestPlantTarget } from './foraging'
+import { GrassCover } from './grassCover'
+import {
+  findBestGrassTarget,
+  findBestGrassWaterTarget,
+  forageGrassBite,
+  grassWaterScore,
+  trySipGrassDew,
+  scoreGrassFoodTarget,
+  tryEatGrass,
+} from './grassForaging'
+import { findBestPlantTarget, scorePlantFoodTarget } from './foraging'
 import {
   findBestPondTarget,
   findBestPlantWaterTarget,
@@ -95,7 +103,9 @@ import {
 import {
   bestMemoryGoal,
   decayCreatureMemories,
+  forgetCreatureMemoryNear,
   recordCreatureMemory,
+  weakenCreatureMemoryNear,
 } from './creatureMemory'
 import { CreatureGrid } from './spatialGrid'
 import {
@@ -114,9 +124,14 @@ import {
 } from './energyEconomy'
 import type { PlantKind } from './plantKinds'
 import {
+  CREATURE_FIRST_SPAWN_DELAY_YEARS,
+  CREATURE_GROUP_SPAWN_INTERVAL_YEARS,
   PLANT_EXTINCT_WIND_RESEED_CHANCE,
   PLANT_KIND_EXTINCT_RESEED_CHANCE,
+  PLANT_WATER_PER_ENERGY,
+  SOIL_CELL_SIZE,
   SOIL_REPRO_MIN_MOISTURE,
+  scaledAtmosphereVaporCapacity,
 } from './config'
 import { classifyDeathCause, createEmptyDeathCauseCounts } from './deathCause'
 import {
@@ -134,23 +149,35 @@ import {
   releaseCreatureWater,
   releasePlantWater,
   releasePlantTranspiration,
-  plantStoredWater,
+  plantHydricMass,
 } from './waterCycle'
-import { distributeInitialWorldWater, fundInitialCreatureHydration } from './waterInit'
+import { tickWoodyPlantWaterUptake } from './plantWaterUptake'
+import { distributeInitialWorldWater, fundInitialCreatureHydration, fundInitialPlantStructuralWater } from './waterInit'
+import { TerrainWater } from './terrainWater'
+import { yearsToTicks } from './timeScale'
 import { Rng } from './rng'
-import type { Corpse, Creature, Plant, Pond, WorldSnapshot, WorldStats } from './types'
+import type { Corpse, Creature, Plant, WorldSnapshot, WorldStats } from './types'
 
 export class World {
   private plants: Plant[] = []
   private corpses: Corpse[] = []
   private creatures: Creature[] = []
-  private ponds: Pond[] = []
+  private terrain: TerrainWater = new TerrainWater()
   private soil: SoilMoisture = new SoilMoisture()
+  private grass: GrassCover = new GrassCover(SOIL_CELL_SIZE)
   private atmosphere: Atmosphere = new Atmosphere()
   private pathogens: Pathogen[] = []
   private rng: Rng
   private settings: SimSettings
   private bounds: WorldBounds
+  /** Index of the next founder group to introduce during the intro cycle. */
+  private creatureNextGroupIndex = 0
+  /** Tick when the next founder group or extinction check is due. */
+  private creatureNextSpawnTick = 0
+  /** True after every settings group has been introduced once — then only extinction checks run. */
+  private creatureIntroCycleComplete = false
+  /** Alternating sex assignment across all founder spawns in this run. */
+  private creatureSexIndexOffset = 0
   private stats: WorldStats = {
     tick: 0,
     plantCount: 0,
@@ -165,8 +192,8 @@ export class World {
     grassPlantCount: 0,
     bushPlantCount: 0,
     treePlantCount: 0,
-    pondWater: 0,
-    hasPond: false,
+    surfaceWater: 0,
+    hasSurfaceWater: false,
     airWater: 0,
     soilWater: 0,
     creatureWater: 0,
@@ -212,17 +239,18 @@ export class World {
     resetCorpseIds()
     resetCreatureIds()
     resetPathogenIds()
-    resetPondIds()
     this.plants = []
     this.corpses = []
     this.creatures = []
-    this.ponds = [createPond(this.rng, this.settings.pondBaseRadius)]
     this.soil = new SoilMoisture()
-    this.atmosphere = new Atmosphere()
+    this.grass = new GrassCover(SOIL_CELL_SIZE)
+    this.terrain = new TerrainWater(SOIL_CELL_SIZE)
+    this.terrain.generate(this.rng, this.settings.pondBaseRadius, this.settings.pondMaxDepth)
+    this.atmosphere = new Atmosphere(scaledAtmosphereVaporCapacity(this.settings.totalWater))
     distributeInitialWorldWater(
       this.settings.totalWater,
       this.soil,
-      this.ponds,
+      this.terrain,
       this.atmosphere,
     )
     this.pathogens = createInitialPathogens(this.rng, 3)
@@ -246,8 +274,8 @@ export class World {
       grassPlantCount: 0,
       bushPlantCount: 0,
       treePlantCount: 0,
-      pondWater: 0,
-      hasPond: false,
+      surfaceWater: 0,
+      hasSurfaceWater: false,
       airWater: 0,
       soilWater: 0,
       creatureWater: 0,
@@ -268,30 +296,39 @@ export class World {
     }
     this.primaryProductionThisTick = 0
 
-    const starterKinds = allPlantKinds()
-    for (let i = 0; i < this.settings.initialPlants; i++) {
-      const championDna = i === 0 ? resolvePlantChampionDna(this.settings) : null
-      if (championDna) {
-        this.plants.push(createPlantWithDna(this.rng, championDna))
-      } else if (i < starterKinds.length) {
-        this.plants.push(createPlantWithDna(this.rng, createPlantKindDna(starterKinds[i], this.rng)))
-      } else {
-        this.plants.push(createPlant(this.rng))
+    const championDna = resolvePlantChampionDna(this.settings)
+    const grassChampion =
+      championDna && plantKindFromDna(championDna) === 'grass' ? championDna : null
+    const grassSeedCount = Math.min(
+      this.settings.maxGrassPlants,
+      Math.max(48, Math.round(this.settings.initialPlants * 0.5)),
+    )
+    this.grass.seedInitial(this.rng, grassSeedCount, grassChampion)
+    for (let gi = 0; gi < this.grass.energy.length; gi++) {
+      if (this.grass.hasGrass(gi)) {
+        this.grass.fundStructuralWaterFromSoil(gi, this.soil, this.atmosphere)
       }
     }
 
-    const groupFounderDna = resolveGroupFounderDnas(
-      this.settings.creatureGroups,
-      this.settings.groupFounders,
-    )
-    const starters = this.spawnStartingCreatures(groupFounderDna)
-    this.creatures.push(...starters)
-    for (const plant of this.plants) {
-      absorbPlantWaterFromSoil(plant, this.soil)
+    const woodyKinds: PlantKind[] = ['bush', 'tree']
+    for (let i = 0; i < this.settings.initialPlants; i++) {
+      const founderDna = i === 0 ? championDna : null
+      if (founderDna && plantKindFromDna(founderDna) !== 'grass') {
+        this.plants.push(createPlantWithDna(this.rng, founderDna))
+      } else if (i < woodyKinds.length) {
+        this.plants.push(createPlantWithDna(this.rng, createPlantKindDna(woodyKinds[i], this.rng)))
+      } else {
+        const kind: PlantKind = this.rng.chance(0.55) ? 'bush' : 'tree'
+        this.plants.push(createPlantWithDna(this.rng, createPlantKindDna(kind, this.rng)))
+      }
     }
-    fundInitialCreatureHydration(this.creatures, this.ponds, this.atmosphere)
-    this.stats.totalWaterBudget = this.settings.totalWater
+
+    this.resetCreatureSpawnSchedule()
+    for (const plant of this.plants) {
+      fundInitialPlantStructuralWater(plant, this.soil, this.atmosphere)
+    }
     this.refreshStats()
+    this.stats.totalWaterBudget = this.stats.totalWater
   }
 
   tick(): void {
@@ -322,25 +359,44 @@ export class World {
     tickWaterCycle(
       this.atmosphere,
       this.soil,
-      this.ponds,
+      this.terrain,
       temperature,
       this.bounds.width,
       this.bounds.height,
     )
 
-    for (const pond of this.ponds) {
-      this.soil.seepFromPond(pond)
-    }
     this.atmosphere.vapor += this.soil.tickLateralDiffusion()
+
+    this.primaryProductionThisTick += this.grass.tick(
+      this.rng,
+      this.soil,
+      this.atmosphere,
+      season.season,
+      sunlight,
+      temperature,
+      this.settings.maxGrassPlants,
+      this.plants,
+    )
 
     for (const plant of this.plants) {
       applyPlantAging(plant)
+      const energyBeforeStress = plant.energy
       applyPlantOldAge(plant)
       applyPlantTemperature(plant, temperature, season.season)
+      const stressEnergyLost = energyBeforeStress - plant.energy
+      if (stressEnergyLost > 0) {
+        releasePlantTranspiration(
+          stressEnergyLost * PLANT_WATER_PER_ENERGY,
+          plant,
+          this.soil,
+          this.atmosphere,
+        )
+      }
+      tickWoodyPlantWaterUptake(plant, this.soil, this.atmosphere, season.season, temperature)
       const transpired = applyPlantDrought(plant, this.soil, season.season, temperature)
       releasePlantTranspiration(transpired, plant, this.soil, this.atmosphere)
       const before = plant.energy
-      growPlant(plant, this.soil, sunlight, temperature, season.season)
+      growPlant(plant, this.soil, sunlight, temperature, season.season, this.atmosphere)
       this.primaryProductionThisTick += Math.max(0, plant.energy - before)
     }
 
@@ -350,10 +406,10 @@ export class World {
 
     this.spawnPlants()
     this.runCreatureBehavior()
-    this.applyPondDrowning()
+    this.applySurfaceDrowning()
     tickDiseaseSystem(this.creatures, this.pathogens, this.rng, this.stats.tick, this.settings)
     this.cullDead()
-    this.maybeRespawnCreatures()
+    this.tickCreatureSpawning()
     this.refreshStats()
   }
 
@@ -362,8 +418,9 @@ export class World {
       plants: this.plants,
       corpses: this.corpses,
       creatures: this.creatures,
-      ponds: this.ponds,
+      terrain: this.terrain.snapshot(this.atmosphere.isRaining),
       soil: this.soil.snapshot(this.atmosphere.isRaining),
+      grass: this.grass.snapshot(),
       pathogens: this.pathogens,
       stats: { ...this.stats },
     }
@@ -377,47 +434,101 @@ export class World {
     return this.bounds.height
   }
 
-  private spawnStartingCreatures(groupFounderDna: ReturnType<typeof resolveGroupFounderDnas>): Creature[] {
+  private resetCreatureSpawnSchedule(): void {
+    this.creatureNextGroupIndex = 0
+    this.creatureNextSpawnTick = yearsToTicks(CREATURE_FIRST_SPAWN_DELAY_YEARS)
+    this.creatureIntroCycleComplete = false
+    this.creatureSexIndexOffset = 0
+  }
+
+  private spawnCreatureGroup(groupIndex: number): Creature[] {
     const founderSettings = {
       founderGeneSpread: this.settings.founderGeneSpread,
       founderJitterChance: this.settings.founderJitterChance,
     }
-    const spawned: Creature[] = []
-    for (const spawn of createMultiGroupPopulation(
-      this.rng,
-      this.settings.creatureGroups,
-      this.settings.herbivoresPerGroup,
-      founderSettings,
-      groupFounderDna,
-    )) {
-      spawned.push(createHerbivore(this.rng, spawn.position, spawn.dna))
-    }
-    return spawned
-  }
-
-  /** Reintroduce herbivores when the population dies out — world state otherwise unchanged. */
-  private maybeRespawnCreatures(): void {
-    if (totalStartingHerbivores(this.settings) === 0) return
-    if (this.creatures.length > 0) return
-    if (this.stats.tick === 0) return
-
     const groupFounderDna = resolveGroupFounderDnas(
       this.settings.creatureGroups,
       this.settings.groupFounders,
     )
-    const newcomers = this.spawnStartingCreatures(groupFounderDna)
-    if (newcomers.length === 0) return
+    const spawned: Creature[] = []
+    for (const spawn of createSingleGroupPopulation(
+      this.rng,
+      groupIndex,
+      this.settings.creatureGroups,
+      this.settings.herbivoresPerGroup,
+      founderSettings,
+      groupFounderDna,
+      this.creatureSexIndexOffset,
+    )) {
+      spawned.push(
+        createHerbivore(
+          this.rng,
+          this.terrain.resolveDryLandSpawn(this.rng, spawn.position),
+          spawn.dna,
+        ),
+      )
+    }
+    this.creatureSexIndexOffset += this.settings.herbivoresPerGroup
+    return spawned
+  }
 
-    fundInitialCreatureHydration(newcomers, this.ponds, this.atmosphere)
+  private introduceCreatureGroup(groupIndex: number): void {
+    const newcomers = this.spawnCreatureGroup(groupIndex)
+    if (newcomers.length === 0) return
+    fundInitialCreatureHydration(newcomers, this.terrain, this.atmosphere)
     this.creatures.push(...newcomers)
     this.stats.births += newcomers.length
   }
 
+  /**
+   * Intro cycle: spawn the next settings group every 50 years (even if prior groups died out).
+   * After all groups have appeared once, check every 50 years for extinction and restart if empty.
+   */
+  private tickCreatureSpawning(): void {
+    if (totalStartingHerbivores(this.settings) === 0) return
+
+    const now = this.stats.tick
+    const totalGroups = this.settings.creatureGroups
+    const interval = yearsToTicks(CREATURE_GROUP_SPAWN_INTERVAL_YEARS)
+    if (now < this.creatureNextSpawnTick) return
+
+    if (!this.creatureIntroCycleComplete) {
+      if (this.creatureNextGroupIndex < totalGroups) {
+        this.introduceCreatureGroup(this.creatureNextGroupIndex)
+        this.creatureNextGroupIndex += 1
+        if (this.creatureNextGroupIndex >= totalGroups) {
+          this.creatureIntroCycleComplete = true
+        }
+      }
+      this.creatureNextSpawnTick = now + interval
+      return
+    }
+
+    this.creatureNextSpawnTick = now + interval
+    if (this.creatures.length > 0) return
+
+    this.creatureIntroCycleComplete = false
+    this.creatureNextGroupIndex = 1
+    this.introduceCreatureGroup(0)
+  }
+
   /** Wind-borne seeds for any lineage that has died out locally. */
   private reseedExtinctPlantKinds(kindCounts: Record<PlantKind, number>): void {
-    const totalExtinction = this.plants.length === 0
+    const totalExtinction = this.plants.length === 0 && this.grass.countEdible() === 0
 
     for (const kind of allPlantKinds()) {
+      if (kind === 'grass') {
+        if (kindCounts.grass > 0) continue
+        if (this.settings.maxGrassPlants <= 0) continue
+        const chance = totalExtinction ? PLANT_EXTINCT_WIND_RESEED_CHANCE : PLANT_KIND_EXTINCT_RESEED_CHANCE
+        if (
+          this.grass.tryWindReseed(this.rng, this.soil, this.atmosphere, chance, this.settings.maxGrassPlants)
+        ) {
+          kindCounts.grass += 1
+        }
+        continue
+      }
+
       if (kindCounts[kind] > 0) continue
       if (maxPlantsForKind(this.settings, kind) <= 0) continue
       if (isPlantKindAtCap(this.settings, kindCounts, kind)) continue
@@ -426,7 +537,7 @@ export class World {
       if (!this.rng.chance(chance)) continue
 
       const plant = createPlantWithDna(this.rng, createPlantKindDna(kind, this.rng))
-      absorbPlantWaterFromSoil(plant, this.soil)
+      fundInitialPlantStructuralWater(plant, this.soil, this.atmosphere)
       this.plants.push(plant)
       kindCounts[kind] += 1
       this.primaryProductionThisTick += plant.energy
@@ -435,18 +546,21 @@ export class World {
 
   private spawnPlants(): void {
     const kindCounts = countPlantsByKind(this.plants)
+    kindCounts.grass = this.grass.countEdible()
 
     if (allPlantKindsAtCap(this.settings, kindCounts)) return
 
     this.reseedExtinctPlantKinds(kindCounts)
-    if (this.plants.length === 0) return
 
-    const attempts = plantPopulationSpawnAttempts(this.plants, this.stats.season)
+    const woodyPlants = this.plants.filter((plant) => plantKindFromDna(plant.dna) !== 'grass')
+    if (woodyPlants.length === 0) return
+
+    const attempts = plantPopulationSpawnAttempts(woodyPlants, this.stats.season)
 
     for (let attempt = 0; attempt < attempts; attempt++) {
       if (allPlantKindsAtCap(this.settings, kindCounts)) return
 
-      const parent = pickPlantForReproduction(this.rng, this.plants)
+      const parent = pickPlantForReproduction(this.rng, woodyPlants)
       if (!this.rng.chance(plantReproductionChance(parent, this.stats.season))) continue
 
       const parentKind = plantKindFromDna(parent.dna)
@@ -462,9 +576,15 @@ export class World {
       if (parent.energy < seedCost + 0.25) continue
 
       parent.energy -= seedCost
+      releasePlantTranspiration(
+        seedCost * PLANT_WATER_PER_ENERGY,
+        parent,
+        this.soil,
+        this.atmosphere,
+      )
       const child = createPlantNear(this.rng, parent, this.stats.season, seedCost * 0.95)
       transferPlantSeedWater(parent, child, seedCost, this.atmosphere)
-      absorbPlantWaterFromSoil(child, this.soil)
+      fundInitialPlantStructuralWater(child, this.soil, this.atmosphere)
       this.plants.push(child)
       kindCounts[parentKind] += 1
     }
@@ -472,6 +592,8 @@ export class World {
 
   private runCreatureBehavior(): void {
     const eatenPlantIds = new Set<number>()
+    const eatenGrassCells = new Set<number>()
+    const grassGrazeCounts = new Map<number, number>()
     const eatenCorpseIds = new Set<number>()
     const newborns: Creature[] = []
     const paired = new Set<number>()
@@ -515,22 +637,59 @@ export class World {
       const traits = creatureTraits(creature)
 
       if (traits.pondDrinking > 0) {
-        for (const pond of this.ponds) {
-          const sip = tryDrinkFromPond(creature, pond, traits.pondDrinking)
-          if (sip > 0) {
-            creature.hydration = capHydration(creature, creature.hydration + sip)
-            recordCreatureMemory(creature, 'water', pond.x, pond.y, traits)
-            break
+        const sip = tryDrinkFromSurface(creature, this.terrain, traits.pondDrinking)
+        if (sip > 0) {
+          creature.hydration = capHydration(creature, creature.hydration + sip)
+          const target = this.terrain.findBestSurfaceTarget(creature.x, creature.y, traits.forageReach)
+          if (target) {
+            recordCreatureMemory(creature, 'water', target.x, target.y, traits)
           }
         }
       }
     }
 
     for (const creature of this.creatures) {
-      if (!needsFood(creature) && !needsWater(creature)) continue
+      if (needsWater(creature) && !shouldForageForFood(creature)) {
+        const traits = creatureTraits(creature)
+        const forageReach = traits.radius + traits.forageReach
+
+        const waterPlant = findBestPlantWaterTarget(creature, this.ediblePlants, forageReach)
+        if (waterPlant) {
+          const biomass = tryEatPlant(creature, waterPlant)
+          if (biomass > 0) {
+            const eaten = foragePlantBite(creature, waterPlant, biomass, this.atmosphere)
+            if (eaten > 0) {
+              recordCreatureMemory(creature, 'water', waterPlant.x, waterPlant.y, traits)
+            }
+          }
+        }
+
+        if (needsWater(creature)) {
+          const grassIdx = findBestGrassWaterTarget(creature, this.grass, forageReach)
+          if (grassIdx !== null) {
+            const center = this.grass.cellCenter(grassIdx)
+            const sipped = trySipGrassDew(creature, this.grass, grassIdx, this.atmosphere)
+            if (sipped > 0) {
+              recordCreatureMemory(creature, 'water', center.x, center.y, traits)
+            }
+          }
+        }
+        continue
+      }
+
+      if (!shouldForageForFood(creature)) continue
 
       const traits = creatureTraits(creature)
       const forageReach = traits.radius + traits.forageReach
+
+      const grassIdx = findBestGrassTarget(
+        creature,
+        traits,
+        this.grass,
+        forageReach,
+        eatenGrassCells,
+        grassGrazeCounts,
+      )
       const nearestPlant = findBestPlantTarget(
         traits,
         this.ediblePlants,
@@ -539,7 +698,43 @@ export class World {
         eatenPlantIds,
       )
 
-      if (nearestPlant) {
+      let ate = false
+      if (grassIdx !== null) {
+        const grassCenter = this.grass.cellCenter(grassIdx)
+        const grassDist = toroidalDistance(creature, grassCenter)
+        const grassScore = scoreGrassFoodTarget(traits, this.grass, grassIdx, grassDist, forageReach)
+        const plantScore =
+          nearestPlant !== null
+            ? scorePlantFoodTarget(
+                traits,
+                plantTraits(nearestPlant),
+                toroidalDistance(creature, nearestPlant),
+                forageReach,
+                plantKindFromDna(nearestPlant.dna),
+              ) *
+              (1 - traits.forageWaterPreference * 0.75)
+            : -1
+
+        if (grassScore >= plantScore) {
+          const biomass = tryEatGrass(creature, this.grass, grassIdx)
+          if (biomass > 0) {
+            const eaten = forageGrassBite(creature, this.grass, grassIdx, biomass, this.atmosphere)
+            if (eaten > 0) {
+              recordCreatureMemory(creature, 'food', grassCenter.x, grassCenter.y, traits)
+              grassGrazeCounts.set(grassIdx, (grassGrazeCounts.get(grassIdx) ?? 0) + 1)
+              if (!this.grass.isEdibleGrass(grassIdx)) {
+                eatenGrassCells.add(grassIdx)
+                forgetCreatureMemoryNear(creature, 'food', grassCenter.x, grassCenter.y)
+              }
+              ate = true
+            }
+          } else {
+            eatenGrassCells.add(grassIdx)
+          }
+        }
+      }
+
+      if (!ate && nearestPlant) {
         const biomass = tryEatPlant(creature, nearestPlant)
         if (biomass > 0) {
           const eaten = foragePlantBite(creature, nearestPlant, biomass, this.atmosphere)
@@ -548,6 +743,25 @@ export class World {
             if (!isPlantEdible(nearestPlant)) {
               eatenPlantIds.add(nearestPlant.id)
             }
+            ate = true
+          }
+        }
+      }
+
+      if (!ate) {
+        const footIdx = this.grass.cellIndex(creature.x, creature.y)
+        if (!this.grass.isEdibleGrass(footIdx)) {
+          forgetCreatureMemoryNear(creature, 'food', creature.x, creature.y, this.grass.cellSize * 0.75)
+        }
+      }
+
+      if (needsWater(creature)) {
+        const grassWaterIdx = findBestGrassWaterTarget(creature, this.grass, forageReach)
+        if (grassWaterIdx !== null) {
+          const center = this.grass.cellCenter(grassWaterIdx)
+          const sipped = trySipGrassDew(creature, this.grass, grassWaterIdx, this.atmosphere)
+          if (sipped > 0) {
+            recordCreatureMemory(creature, 'water', center.x, center.y, traits)
           }
         }
       }
@@ -689,14 +903,33 @@ export class World {
     return food
   }
 
-  private findBestPlantFood(creature: Creature, seekRange: number): Plant | null {
+  private findBestPlantFood(creature: Creature, seekRange: number): { x: number; y: number } | null {
     const traits = creatureTraits(creature)
-    return findBestPlantTarget(
+    const grassIdx = findBestGrassTarget(creature, traits, this.grass, seekRange)
+    const plant = findBestPlantTarget(
       traits,
       this.ediblePlants,
-      (plant) => toroidalDistance(creature, plant),
+      (p) => toroidalDistance(creature, p),
       seekRange,
     )
+
+    if (grassIdx === null) return plant
+    if (!plant) {
+      return this.grass.cellCenter(grassIdx)
+    }
+
+    const grassCenter = this.grass.cellCenter(grassIdx)
+    const grassDist = toroidalDistance(creature, grassCenter)
+    const grassScore = scoreGrassFoodTarget(traits, this.grass, grassIdx, grassDist, seekRange)
+    const plantScore = scorePlantFoodTarget(
+      traits,
+      plantTraits(plant),
+      toroidalDistance(creature, plant),
+      seekRange,
+      plantKindFromDna(plant.dna),
+    )
+    if (grassScore >= plantScore) return grassCenter
+    return plant
   }
 
   private noteSensoryMemories(creature: Creature, traits: ReturnType<typeof creatureTraits>): void {
@@ -704,14 +937,20 @@ export class World {
 
     if (creature.mode === 'thirsty') {
       if (traits.pondDrinking > 0.08) {
-        const pond = findBestPondTarget(creature, this.ponds, traits.vision)
-        if (pond && isPondDrinkable(pond)) {
-          recordCreatureMemory(creature, 'water', pond.x, pond.y, traits, 0.6)
+        const surface = findBestPondTarget(creature, this.terrain, traits.vision)
+        if (surface && isPondDrinkable(this.terrain)) {
+          recordCreatureMemory(creature, 'water', surface.x, surface.y, traits, 0.6)
         }
       }
-      const plant = findBestPlantWaterTarget(creature, this.ediblePlants, traits.vision)
-      if (plant) {
-        recordCreatureMemory(creature, 'water', plant.x, plant.y, traits, 0.5)
+      if (traits.forageWaterPreference > 0.08) {
+        const plant = findBestPlantWaterTarget(creature, this.ediblePlants, traits.vision)
+        const grassIdx = findBestGrassWaterTarget(creature, this.grass, traits.vision)
+        if (plant) {
+          recordCreatureMemory(creature, 'water', plant.x, plant.y, traits, 0.5)
+        } else if (grassIdx !== null) {
+          const center = this.grass.cellCenter(grassIdx)
+          recordCreatureMemory(creature, 'water', center.x, center.y, traits, 0.5)
+        }
       }
     }
 
@@ -723,6 +962,50 @@ export class World {
     }
   }
 
+  private foodAvailableNear(x: number, y: number, seekRange: number): boolean {
+    const idx = this.grass.cellIndex(x, y)
+    if (this.grass.isEdibleGrass(idx)) return true
+
+    const cx = Math.floor(x / this.grass.cellSize)
+    const cy = Math.floor(y / this.grass.cellSize)
+    const cellReach = Math.ceil(seekRange / this.grass.cellSize) + 1
+
+    for (let dr = -cellReach; dr <= cellReach; dr++) {
+      for (let dc = -cellReach; dc <= cellReach; dc++) {
+        const col = ((cx + dc) % this.grass.cols + this.grass.cols) % this.grass.cols
+        const row = ((cy + dr) % this.grass.rows + this.grass.rows) % this.grass.rows
+        const cellIdx = row * this.grass.cols + col
+        if (!this.grass.isEdibleGrass(cellIdx)) continue
+        const center = this.grass.cellCenter(cellIdx)
+        if (toroidalDistance({ x, y }, center) <= seekRange) return true
+      }
+    }
+
+    for (const plant of this.ediblePlants) {
+      if (toroidalDistance({ x, y }, plant) <= seekRange) return true
+    }
+
+    return false
+  }
+
+  private resolveFoodMemoryGoal(
+    creature: Creature,
+    memory: { x: number; y: number },
+    seekRange: number,
+  ): { x: number; y: number } | null {
+    if (this.foodAvailableNear(memory.x, memory.y, seekRange)) {
+      const idx = this.grass.cellIndex(memory.x, memory.y)
+      if (this.grass.isEdibleGrass(idx)) {
+        return this.grass.cellCenter(idx)
+      }
+      return { x: memory.x, y: memory.y }
+    }
+
+    weakenCreatureMemoryNear(creature, 'food', memory.x, memory.y, 0.45)
+    const live = this.findBestPlantFood(creature, seekRange)
+    return live
+  }
+
   private findFoodGoal(creature: Creature, vision: number): { x: number; y: number } {
     const traits = creatureTraits(creature)
     const seekRange = vision * traits.exploreVisionMult
@@ -730,9 +1013,9 @@ export class World {
     const memory = bestMemoryGoal(creature, 'food', traits, memoryRange)
     const memoryScore = memory?.score ?? 0
 
-    const food = this.findBestPlantFood(creature, vision)
+    const food = this.findBestPlantFood(creature, seekRange)
     const foodDist = food ? toroidalDistance(creature, food) : Infinity
-    const liveFoodScore = food ? 1 / (1 + foodDist / Math.max(vision, 1)) : 0
+    const liveFoodScore = food ? 1 / (1 + foodDist / Math.max(seekRange, 1)) : 0
 
     const corpse = findBestCorpseTarget(creature, this.corpses, vision)
     if (corpse) {
@@ -752,7 +1035,8 @@ export class World {
     }
 
     if (memory && memoryScore > 0.04 && (!food || memoryScore > liveFoodScore * 1.02)) {
-      return { x: memory.x, y: memory.y }
+      const resolved = this.resolveFoodMemoryGoal(creature, memory, seekRange)
+      if (resolved) return resolved
     }
 
     return food ?? this.findFoodGoalWhileExploring(creature, vision) ?? this.pickWanderGoal(creature)
@@ -763,14 +1047,19 @@ export class World {
     traits: ReturnType<typeof creatureTraits>,
     memory: { x: number; y: number },
     seekRange: number,
-    canPond: boolean,
+    canSurface: boolean,
   ): { x: number; y: number } {
-    if (canPond) {
-      for (const pond of this.ponds) {
-        if (!isPondDrinkable(pond)) continue
-        const dist = toroidalDistance(memory, pond)
-        if (dist < seekRange * 0.55 + pond.baseRadius) {
-          return pondApproachTarget(creature, pond, traits.radius + traits.forageReach * 0.2)
+    if (canSurface) {
+      const surface = this.terrain.findBestSurfaceTarget(memory.x, memory.y, seekRange)
+      if (surface) {
+        const dist = toroidalDistance(memory, surface)
+        if (dist < seekRange * 0.55 + this.terrain.cellSize) {
+          return pondApproachTarget(
+            creature,
+            surface,
+            this.terrain,
+            traits.radius + traits.forageReach * 0.2,
+          )
         }
       }
     }
@@ -779,56 +1068,89 @@ export class World {
 
   private findWaterGoal(creature: Creature, vision: number): { x: number; y: number } {
     const traits = creatureTraits(creature)
-    const canPond = traits.pondDrinking > 0.08
+    const canSurface = traits.pondDrinking > 0.08
     const seekRange = vision * traits.exploreVisionMult
     const memoryRange = seekRange * (1.6 + traits.memoryRecall)
 
     const memory = bestMemoryGoal(creature, 'water', traits, memoryRange)
     const memoryScore = memory?.score ?? 0
 
-    const pond = canPond ? findBestPondTarget(creature, this.ponds, seekRange) : null
-    const pondDist = pond ? toroidalDistance(creature, pond) : Infinity
-    const pondScore = pond ? pondWaterScore(creature, pondDist, seekRange) : 0
+    const surface = canSurface ? findBestPondTarget(creature, this.terrain, seekRange) : null
+    const surfaceDist = surface ? toroidalDistance(creature, surface) : Infinity
+    const surfaceScore = surface ? pondWaterScore(creature, surfaceDist, seekRange) : 0
 
     const plant = findBestPlantWaterTarget(creature, this.ediblePlants, seekRange)
     const plantDist = plant ? toroidalDistance(creature, plant) : Infinity
-    const plantScore = plant ? plantWaterScore(plant, plantDist, seekRange) : 0
+    const plantScore = plant
+      ? plantWaterScore(plant, plantDist, seekRange, traits.forageWaterPreference)
+      : 0
 
-    const bestLiveScore = Math.max(pondScore, plantScore)
+    const grassIdx = findBestGrassWaterTarget(creature, this.grass, seekRange)
+    const grassCenter = grassIdx !== null ? this.grass.cellCenter(grassIdx) : null
+    const grassDist = grassCenter ? toroidalDistance(creature, grassCenter) : Infinity
+    const grassScore =
+      grassIdx !== null
+        ? grassWaterScore(this.grass, grassIdx, grassDist, seekRange, traits.forageWaterPreference)
+        : 0
+
+    const bestLiveScore = Math.max(surfaceScore, plantScore, grassScore)
     if (memory && memoryScore > bestLiveScore * 0.92 && memoryScore > 0.04) {
-      return this.resolveWaterMemoryGoal(creature, traits, memory, seekRange, canPond)
+      return this.resolveWaterMemoryGoal(creature, traits, memory, seekRange, canSurface)
     }
 
-    if (pondScore >= plantScore && pond) {
-      return pondApproachTarget(creature, pond, traits.radius + traits.forageReach * 0.2)
+    if (surfaceScore >= plantScore && surfaceScore >= grassScore && surface) {
+      return pondApproachTarget(
+        creature,
+        surface,
+        this.terrain,
+        traits.radius + traits.forageReach * 0.2,
+      )
     }
 
-    if (plant) {
+    if (plantScore >= grassScore && plant) {
       return { x: plant.x, y: plant.y }
     }
 
-    const fallbackPond = canPond ? findBestPondTarget(creature, this.ponds, vision) : null
-    if (fallbackPond) {
-      return pondApproachTarget(creature, fallbackPond, traits.radius + traits.forageReach * 0.2)
+    if (grassCenter) {
+      return grassCenter
+    }
+
+    const fallbackSurface = canSurface ? findBestPondTarget(creature, this.terrain, vision) : null
+    if (fallbackSurface) {
+      return pondApproachTarget(
+        creature,
+        fallbackSurface,
+        this.terrain,
+        traits.radius + traits.forageReach * 0.2,
+      )
     }
 
     if (memory && memoryScore > 0.04) {
-      return this.resolveWaterMemoryGoal(creature, traits, memory, seekRange, canPond)
+      return this.resolveWaterMemoryGoal(creature, traits, memory, seekRange, canSurface)
     }
 
     return this.pickWanderGoal(creature)
   }
 
-  private applyPondDrowning(): void {
-    for (const pond of this.ponds) {
-      if (!isPondDrinkable(pond)) continue
-      for (const creature of this.creatures) {
-        applyCreatureDrowning(creature, pond)
-      }
-      for (const plant of this.plants) {
-        applyPlantDrowning(plant, pond, plantRadius(plant))
+  private applySurfaceDrowning(): void {
+    if (!isPondDrinkable(this.terrain)) return
+    for (const creature of this.creatures) {
+      applyCreatureDrowning(creature, this.terrain)
+    }
+    for (const plant of this.plants) {
+      const before = plant.energy
+      applyPlantDrowning(plant, this.terrain, plantRadius(plant), plantDrownDamage(plant))
+      const energyLost = before - plant.energy
+      if (energyLost > 0) {
+        releasePlantTranspiration(
+          energyLost * PLANT_WATER_PER_ENERGY,
+          plant,
+          this.soil,
+          this.atmosphere,
+        )
       }
     }
+    this.grass.applyDrowning(this.terrain, this.soil, this.atmosphere, this.atmosphere.isRaining)
   }
 
   private findGoal(creature: Creature): { x: number; y: number } {
@@ -896,7 +1218,7 @@ export class World {
       }
       releaseCreatureWater(creature, this.soil, this.atmosphere)
       this.corpses.push(createCorpseFromCreature(creature))
-      const cause = classifyDeathCause(creature, this.ponds)
+      const cause = classifyDeathCause(creature, this.terrain)
       this.stats.deathCauseCounts[cause] += 1
       this.stats.deaths += 1
     }
@@ -908,6 +1230,12 @@ export class World {
       releasePlantWater(plant, this.soil, this.atmosphere)
     }
     this.plants = this.plants.filter(isPlantEdible)
+
+    for (let i = 0; i < this.grass.energy.length; i++) {
+      if (this.grass.hasGrass(i)) continue
+      this.grass.releaseDeadWater(i, this.soil, this.atmosphere)
+    }
+
     this.corpses = this.corpses.filter(isCorpseEdible)
   }
 
@@ -917,33 +1245,33 @@ export class World {
     this.stats.primaryProduction = this.primaryProductionThisTick
 
     const kindCounts = countPlantsByKind(this.plants)
-    this.stats.grassPlantCount = kindCounts.grass
+    this.stats.grassPlantCount = this.grass.countEdible()
     this.stats.bushPlantCount = kindCounts.bush
     this.stats.treePlantCount = kindCounts.tree
 
-    const pond = this.ponds[0]
-    this.stats.pondWater = pond?.water ?? 0
-    this.stats.hasPond = pond !== undefined
+    this.stats.surfaceWater = this.terrain.totalWater()
+    this.stats.hasSurfaceWater = this.terrain.hasStandingWater()
     this.stats.airWater = this.atmosphere.vapor
     this.stats.soilWater = this.soil.totalWater()
     let creatureWater = 0
     for (const creature of this.creatures) creatureWater += creature.hydration
     this.stats.creatureWater = creatureWater
-    let plantWater = 0
-    for (const plant of this.plants) plantWater += plantStoredWater(plant)
+    let plantWater = this.grass.totalWater()
+    for (const plant of this.plants) plantWater += plantHydricMass(plant)
     this.stats.plantWater = plantWater
     this.stats.totalWater =
-      this.stats.pondWater +
+      this.stats.surfaceWater +
       this.stats.airWater +
       this.stats.soilWater +
       this.stats.creatureWater +
       plantWater
+
     this.stats.avgSoilMoisture = this.soil.averageMoisture()
     this.stats.airHumidity = this.atmosphere.humidity
     this.stats.isRaining = this.atmosphere.isRaining
 
     const energy = sumEntityEnergy(this.plants, this.creatures, this.corpses)
-    this.stats.plantEnergy = energy.plants
+    this.stats.plantEnergy = energy.plants + this.grass.totalEnergy()
     this.stats.creatureEnergy = energy.creatures
     this.stats.corpseEnergy = energy.corpses
     this.stats.totalEnergy = energy.total

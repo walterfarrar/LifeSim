@@ -70,7 +70,7 @@ export function CreatureInspector({ creature, onClose, onEditInDesigner }: Creat
   }
 
   return (
-    <section className="creature-inspector">
+    <section className="map-inspector creature-inspector">
       <header className="inspector-header">
         <div className="inspector-title-row">
           <CreatureAvatar creature={creature} size={52} />

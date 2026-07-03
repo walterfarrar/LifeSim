@@ -1,4 +1,4 @@
-import { PLANT_WATER_PER_ENERGY, SOIL_CELL_WATER_CAPACITY } from '../config'
+import { DROWN_PLANT_DAMAGE, DROWN_TREE_DAMAGE_SCALE, PLANT_WATER_PER_ENERGY, SOIL_CELL_WATER_CAPACITY } from '../config'
 import { cloneDNA } from '../dna'
 import { energyFromPlantBiomass } from '../energyEconomy'
 import { normalizePlantGenes } from '../genomeNormalize'
@@ -11,8 +11,9 @@ import type { SeasonName } from '../seasons'
 import { wrapPosition } from '../toroidal'
 import type { Creature, Plant, Vec2 } from '../types'
 import { getWorldBounds } from '../worldBounds'
-import type { SoilAccess } from '../soilMoisture'
-import { moistureGrowthFactor, plantWaterDemandForGrowth } from '../soilMoisture'
+import { moistureGrowthFactor, type SoilAccess } from '../soilMoisture'
+import { waterUnitsForGrowth, clampGrowthReserveOverflow } from '../plantWaterUptake'
+import { releaseTranspiredWater, type AtmospherePool } from '../transpiration'
 import { temperatureGrowthFactor } from '../temperature'
 import { capEnergy, capHydration, creatureTraits } from './creature'
 
@@ -30,7 +31,7 @@ export function plantLineageLabel(plant: Plant): string {
   return plantKindLabelFromDna(plant.dna)
 }
 
-function finalizePlantDna(dna: Plant['dna']): Plant['dna'] {
+export function finalizePlantDna(dna: Plant['dna']): Plant['dna'] {
   const genes = normalizePlantGenes(Array.from(dna))
   const out = new Uint8Array(genes.length)
   for (let i = 0; i < genes.length; i++) {
@@ -100,25 +101,34 @@ function buildPlant(
 }
 
 /** Spread range grows as the parent plant ages — colonies push outward over time. */
+/** Room left in the growth reserve (not structural biomass water). */
 export function plantMaxStoredWater(plant: Plant): number {
-  return plantTraits(plant).maxEnergy * PLANT_WATER_PER_ENERGY
+  const traits = plantTraits(plant)
+  return Math.max(0, (traits.maxEnergy - plant.energy) * PLANT_WATER_PER_ENERGY)
 }
 
-/** Pull initial tissue water from local soil so new plants do not add water to the world. */
-export function absorbPlantWaterFromSoil(plant: Plant, soil: SoilAccess): void {
-  const target = Math.min(plantMaxStoredWater(plant), plant.energy * PLANT_WATER_PER_ENERGY)
-  if (target <= plant.water) return
+/** Pull growth reserve from local soil on spawn (overflow transpires). */
+export function absorbPlantWaterFromSoil(
+  plant: Plant,
+  soil: SoilAccess,
+  atmosphere: AtmospherePool,
+): void {
+  const reserveCap = plantMaxStoredWater(plant)
+  if (reserveCap <= 0 || plant.water >= reserveCap) return
 
-  const need = target - plant.water
+  const need = reserveCap - plant.water
   const taken = soil.consume(plant.x, plant.y, need / SOIL_CELL_WATER_CAPACITY)
-  plant.water += taken * SOIL_CELL_WATER_CAPACITY
+  const waterUnits = taken * SOIL_CELL_WATER_CAPACITY
+  const stored = Math.min(waterUnits, reserveCap - plant.water)
+  plant.water += stored
+  releaseTranspiredWater(atmosphere, soil, plant.x, plant.y, waterUnits - stored)
 }
 
 export function transferPlantSeedWater(
   parent: Plant,
   child: Plant,
   seedCost: number,
-  atmosphere: { vapor: number },
+  atmosphere: AtmospherePool,
 ): void {
   const seedWater = Math.min(parent.water, seedCost * PLANT_WATER_PER_ENERGY)
   parent.water = Math.max(0, parent.water - seedWater)
@@ -243,6 +253,8 @@ function droughtSafeMoistureFactor(kind: ReturnType<typeof plantKindFromDna>): n
       return 0.14
     case 'bush':
       return 0.17
+    case 'tree':
+      return 0.34
     default:
       return 0.28
   }
@@ -283,11 +295,11 @@ export function applyPlantDrought(
   const droughtTolerance =
     0.25 +
     traits.hardiness * 0.5 +
-    (kind === 'tree' ? 0.2 : 0) +
+    (kind === 'tree' ? 0.48 : 0) +
     (kind === 'grass' ? 0.22 : 0) +
     (kind === 'bush' ? 0.14 : 0)
   const thirst = 0.55 + traits.moistureNeed * 0.45
-  const kindDrainScale = kind === 'grass' ? 0.48 : kind === 'bush' ? 0.62 : 1
+  const kindDrainScale = kind === 'grass' ? 0.48 : kind === 'bush' ? 0.62 : 0.48
   const drain =
     severity *
     ramp *
@@ -295,10 +307,9 @@ export function applyPlantDrought(
     Math.max(0.15, 1.05 - droughtTolerance) *
     kindDrainScale
 
-  const waterLost = Math.min(plant.water, drain * PLANT_WATER_PER_ENERGY)
-  plant.water = Math.max(0, plant.water - waterLost)
+  const released = drain * PLANT_WATER_PER_ENERGY
   plant.energy = Math.max(0, plant.energy - drain)
-  return waterLost
+  return released
 }
 
 export function growPlant(
@@ -307,6 +318,7 @@ export function growPlant(
   sunlight: number,
   temperature: number,
   season: SeasonName,
+  atmosphere: AtmospherePool,
 ): void {
   const traits = plantTraits(plant)
   const kind = plantKindFromDna(plant.dna)
@@ -326,28 +338,36 @@ export function growPlant(
   const potentialGrowth = traits.growthRate * moistureFactor * sunlight * tempFactor * seasonal
   if (potentialGrowth <= 0) return
 
-  const demand = plantWaterDemandForGrowth(potentialGrowth, traits.moistureNeed)
-  const taken = soil.consume(plant.x, plant.y, demand)
-  const waterTaken = taken * SOIL_CELL_WATER_CAPACITY
-  const room = Math.max(0, plantMaxStoredWater(plant) - plant.water)
-  const absorbed = Math.min(waterTaken, room)
-  plant.water += absorbed
-  if (waterTaken > absorbed) {
-    soil.depositWater(plant.x, plant.y, waterTaken - absorbed)
+  const waterDemandUnits = waterUnitsForGrowth(potentialGrowth)
+  const available = Math.min(plant.water, waterDemandUnits)
+  const waterFactor = waterDemandUnits > 0 ? available / waterDemandUnits : 0
+  const uncappedGrowth = potentialGrowth * waterFactor
+  const room = Math.max(0, traits.maxEnergy - plant.energy)
+  const growth = Math.min(room, uncappedGrowth)
+  let waterConsumed = available
+  if (uncappedGrowth > 1e-9 && growth < uncappedGrowth) {
+    waterConsumed = available * (growth / uncappedGrowth)
   }
-  const waterFactor = demand > 0 ? taken / demand : 0
-  const growth = potentialGrowth * waterFactor
-
-  plant.energy = Math.min(traits.maxEnergy, plant.energy + growth)
+  plant.water = Math.max(0, plant.water - waterConsumed)
+  plant.energy += growth
+  plant.water = clampGrowthReserveOverflow(
+    plant.water,
+    plant.energy,
+    traits.maxEnergy,
+    atmosphere,
+    soil,
+    plant,
+  )
 }
 
 export function bitePlant(plant: Plant, amount: number): { eaten: number; waterReleased: number } {
   const eaten = Math.min(plant.energy, amount)
   if (eaten <= 0) return { eaten: 0, waterReleased: 0 }
-  const waterShare = plant.energy > 0 ? (eaten / plant.energy) * plant.water : 0
+  const reserveShare = plant.energy > 0 ? (eaten / plant.energy) * plant.water : 0
+  const structuralWater = eaten * PLANT_WATER_PER_ENERGY
   plant.energy -= eaten
-  plant.water = Math.max(0, plant.water - waterShare)
-  return { eaten, waterReleased: waterShare }
+  plant.water = Math.max(0, plant.water - reserveShare)
+  return { eaten, waterReleased: reserveShare + structuralWater }
 }
 
 /** Bite a plant — creature gains digestible energy and tissue water (overflow returns to air). */
@@ -372,6 +392,13 @@ export function foragePlantBite(
 
 export function isPlantEdible(plant: Plant): boolean {
   return plant.energy > 0.5
+}
+
+export function plantDrownDamage(plant: Plant): number {
+  if (plantKindFromDna(plant.dna) === 'tree') {
+    return DROWN_PLANT_DAMAGE * DROWN_TREE_DAMAGE_SCALE
+  }
+  return DROWN_PLANT_DAMAGE
 }
 
 export function plantRadius(plant: Plant): number {

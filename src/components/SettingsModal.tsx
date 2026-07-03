@@ -4,6 +4,8 @@ import {
   MAX_WORLD_WIDTH,
   MIN_WORLD_HEIGHT,
   MIN_WORLD_WIDTH,
+  POND_MAX_BASE_RADIUS,
+  POND_MIN_BASE_RADIUS,
 } from '../sim/config'
 import {
   AUTO_CHAMPION_GENOME_ID,
@@ -41,23 +43,52 @@ type NumberFieldProps = {
 }
 
 function NumberField({ label, hint, value, min, max, step = 1, onChange }: NumberFieldProps) {
+  const [text, setText] = useState(String(value))
+  const [focused, setFocused] = useState(false)
+
+  useEffect(() => {
+    if (!focused) {
+      setText(String(value))
+    }
+  }, [value, focused])
+
+  const parsed = Number(text)
+  const isNumeric = text.trim() !== '' && Number.isFinite(parsed)
+  const outOfBounds = isNumeric && (parsed < min || parsed > max)
+  const invalid = text.trim() !== '' && (!isNumeric || outOfBounds)
+
+  const commit = () => {
+    setFocused(false)
+    if (!isNumeric) {
+      setText(String(value))
+      return
+    }
+    const committed = step >= 1 ? Math.round(parsed) : parsed
+    onChange(committed)
+    setText(String(committed))
+  }
+
   return (
-    <label className="settings-field">
+    <label className={`settings-field${invalid ? ' settings-field-invalid' : ''}`}>
       <span className="settings-label">{label}</span>
       {hint && <span className="settings-hint">{hint}</span>}
       <input
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => {
-          const parsed = Number(event.target.value)
-          if (Number.isFinite(parsed)) {
-            onChange(Math.min(max, Math.max(min, parsed)))
+        type="text"
+        inputMode="decimal"
+        value={text}
+        aria-invalid={invalid || undefined}
+        onChange={(event) => setText(event.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.currentTarget.blur()
           }
         }}
       />
+      {outOfBounds && (
+        <span className="settings-range-hint">Allowed range: {min}–{max}</span>
+      )}
     </label>
   )
 }
@@ -213,7 +244,7 @@ export function SettingsModal({
               />
               <NumberField
                 label="Max grass"
-                hint="Population cap for grass"
+                hint="Cap on soil tiles with grass turf (one dominant strain per tile)"
                 value={draft.maxGrassPlants}
                 min={0}
                 max={4000}
@@ -296,7 +327,7 @@ export function SettingsModal({
             <div className="settings-fields">
               <NumberField
                 label="Total water"
-                hint="Closed-cycle budget at reset — split across pond, soil, air, and living; lower = desert, higher = oasis"
+                hint="Closed-cycle budget at reset — split across surface pools, soil, air, and living; lower = desert, higher = oasis"
                 value={draft.totalWater}
                 min={2000}
                 max={250000}
@@ -304,13 +335,22 @@ export function SettingsModal({
                 onChange={(totalWater) => onChange(patch(draft, { totalWater }))}
               />
               <NumberField
-                label="Pond size"
-                hint="Base radius at full water in pixels; starting volume scales with area"
+                label="Pond width"
+                hint="Radius of the main pond in pixels — controls how wide the basin is, not how deep"
                 value={draft.pondBaseRadius}
-                min={30}
-                max={200}
+                min={POND_MIN_BASE_RADIUS}
+                max={POND_MAX_BASE_RADIUS}
                 step={5}
                 onChange={(pondBaseRadius) => onChange(patch(draft, { pondBaseRadius }))}
+              />
+              <NumberField
+                label="Pond depth"
+                hint="Max standing water depth at the pond center (water units). Puddles elsewhere stay 0–10. Rim slopes gradually from center to shore."
+                value={draft.pondMaxDepth}
+                min={12}
+                max={120}
+                step={2}
+                onChange={(pondMaxDepth) => onChange(patch(draft, { pondMaxDepth }))}
               />
               <NumberField
                 label="Day length"

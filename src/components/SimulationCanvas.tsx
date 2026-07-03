@@ -5,7 +5,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { TICKS_PER_SECOND } from '../sim/config'
+import { SOIL_CELL_WATER_CAPACITY, TICKS_PER_SECOND } from '../sim/config'
 import { dayNightLabel, applyViewportAmbienceStyle } from '../sim/dayNight'
 import { formatDayLengthSeconds, seasonLabel, type SeasonName } from '../sim/seasons'
 import { formatTemperatureC } from '../sim/temperature'
@@ -13,21 +13,22 @@ import { MIN_SPEED_MULTIPLIER } from '../sim/timeScale'
 import { corpseRadius, drawCorpseBody } from '../sim/entities/corpse'
 import { plantRadius } from '../sim/entities/plant'
 import { drawPlantBody } from '../sim/render/plantDraw'
-import { drawPondBody } from '../sim/render/pondDraw'
+import { drawTerrainHeight, drawTerrainWater } from '../sim/render/terrainWaterDraw'
 import { drawSoilMoisture } from '../sim/render/soilDraw'
-import { pondRadius } from '../sim/entities/pond'
+import { drawGrassCover } from '../sim/render/grassDraw'
 import { moistureGrowthFactor } from '../sim/soilMoisture'
 import { temperatureComfortFactor } from '../sim/temperature'
 import { isPlantDormant } from '../sim/plantClimate'
 import { creatureTraits } from '../sim/entities/creature'
 import { plantTraits } from '../sim/entities/plant'
+import { plantKindFromDna } from '../sim/plantKinds'
 import { drawCreatureBody, creatureFillStyle } from '../sim/render/creatureDraw'
 import { plantFillStyle } from '../sim/phenotype'
 import { MODE_RING_COLORS, VISUAL_THEME } from '../sim/render/visualTheme'
 import { toroidalDisplayOffsets } from '../sim/toroidal'
 import { World } from '../sim/world'
 import type { SimSettings } from '../sim/simSettings'
-import type { Creature, Plant, Pond, WorldSnapshot } from '../sim/types'
+import type { Creature, Plant, WorldSnapshot } from '../sim/types'
 
 import { clientToWorld } from './canvasCoords'
 import {
@@ -41,16 +42,22 @@ import {
   type ViewportTransform,
 } from './canvasViewport'
 import { pickCreatureAt } from './creatureHitTest'
+import { pickPlantAt } from './plantHitTest'
+import { soilCellAt } from './soilHitTest'
 import { VisualLegend } from './VisualLegend'
+import { InspectModeBar } from './InspectModeBar'
+import type { InspectMode, MapSelection } from '../sim/mapSelection'
 
 type SimulationCanvasProps = {
   paused: boolean
   speedMultiplier: number
   seed: number
   settings: SimSettings
-  selectedId: number | null
+  inspectMode: InspectMode
+  selection: MapSelection | null
   onSnapshot: (snapshot: WorldSnapshot) => void
-  onSelectCreature: (id: number | null) => void
+  onSelect: (selection: MapSelection | null) => void
+  onInspectModeChange: (mode: InspectMode) => void
 }
 
 const DRAG_THRESHOLD_PX = 6
@@ -60,9 +67,11 @@ export function SimulationCanvas({
   speedMultiplier,
   seed,
   settings,
-  selectedId,
+  inspectMode,
+  selection,
   onSnapshot,
-  onSelectCreature,
+  onSelect,
+  onInspectModeChange,
 }: SimulationCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const displayCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -162,7 +171,7 @@ export function SimulationCanvas({
       }
 
       const snapshot = world.snapshot()
-      drawWorld(worldCtx, snapshot, selectedId, world.width, world.height)
+      drawWorld(worldCtx, snapshot, selection, world.width, world.height)
 
       const viewportSize = viewportSizeRef.current
       if (viewportSize.width > 0 && viewportSize.height > 0) {
@@ -181,7 +190,13 @@ export function SimulationCanvas({
 
       const viewportEl = viewportRef.current
       if (viewportEl) {
-        applyViewportAmbienceStyle(viewportEl, snapshot.stats.sunlight, snapshot.stats.season)
+        applyViewportAmbienceStyle(
+          viewportEl,
+          snapshot.stats.sunlight,
+          snapshot.stats.season,
+          snapshot.stats.dayPhase,
+          snapshot.stats.isRaining,
+        )
       }
 
       if (snapshot.stats.tick !== lastReportedTick) {
@@ -201,7 +216,7 @@ export function SimulationCanvas({
 
     frameId = requestAnimationFrame(render)
     return () => cancelAnimationFrame(frameId)
-  }, [onSnapshot, selectedId])
+  }, [onSnapshot, selection])
 
   useEffect(() => {
     const viewportEl = viewportRef.current
@@ -247,7 +262,7 @@ export function SimulationCanvas({
     [applyViewport],
   )
 
-  const pickCreatureAtClient = useCallback(
+  const pickAtClient = useCallback(
     (clientX: number, clientY: number) => {
       const viewportEl = viewportRef.current
       const world = worldRef.current
@@ -262,14 +277,32 @@ export function SimulationCanvas({
         viewportRefState.current,
       )
       if (!point) {
-        onSelectCreature(null)
+        onSelect(null)
         return
       }
 
-      const hit = pickCreatureAt(world.snapshot().creatures, point.x, point.y, world.width, world.height)
-      onSelectCreature(hit?.id ?? null)
+      const snapshot = world.snapshot()
+
+      if (inspectMode === 'creature') {
+        const hit = pickCreatureAt(snapshot.creatures, point.x, point.y, world.width, world.height)
+        if (hit) {
+          onSelect({ type: 'creature', id: hit.id })
+          return
+        }
+      }
+
+      if (inspectMode === 'plant') {
+        const hit = pickPlantAt(snapshot.plants, point.x, point.y, world.width, world.height)
+        if (hit) {
+          onSelect({ type: 'plant', id: hit.id })
+          return
+        }
+      }
+
+      const cell = soilCellAt(snapshot.soil, point.x, point.y)
+      onSelect({ type: 'soil', col: cell.col, row: cell.row })
     },
-    [onSelectCreature],
+    [inspectMode, onSelect],
   )
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -316,7 +349,7 @@ export function SimulationCanvas({
     }
 
     if (wasClick) {
-      pickCreatureAtClient(event.clientX, event.clientY)
+      pickAtClient(event.clientX, event.clientY)
     }
   }
 
@@ -338,6 +371,7 @@ export function SimulationCanvas({
         {seasonLabel(dayDisplay.season)} · {dayDisplay.label}
       </div>
       <VisualLegend />
+      <InspectModeBar mode={inspectMode} onChange={onInspectModeChange} />
       <div className="zoom-controls" aria-label="Map zoom">
         <button
           type="button"
@@ -359,7 +393,7 @@ export function SimulationCanvas({
       </div>
       <div
         ref={viewportRef}
-        className="canvas-viewport"
+        className={`canvas-viewport inspect-${inspectMode}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={finishPointer}
@@ -395,6 +429,7 @@ function drawPlantAt(
   soilMoisture: number,
   temperature: number,
   season: SeasonName,
+  selectedPlantId: number | null,
 ): void {
   const radius = plantRadius(plant)
   const traits = plantTraits(plant)
@@ -416,6 +451,12 @@ function drawPlantAt(
     radius,
     plantFillStyle(plant, moistureFactor, tempComfort),
   )
+
+  if (plant.id === selectedPlantId) {
+    ctx.strokeStyle = VISUAL_THEME.selectionRing
+    ctx.lineWidth = 2.5
+    strokeCircle(ctx, plant.x + ox, plant.y + oy, radius + 6)
+  }
 }
 
 function drawCreatureAt(
@@ -488,46 +529,66 @@ function drawCreatureAt(
   }
 }
 
-function drawPondAt(ctx: CanvasRenderingContext2D, pond: Pond, ox: number, oy: number): void {
-  drawPondBody(ctx, pond, pond.x + ox, pond.y + oy)
-}
-
-function soilCellIndex(
+function drawSoilSelection(
+  ctx: CanvasRenderingContext2D,
   soil: WorldSnapshot['soil'],
-  x: number,
-  y: number,
-): number {
-  const cx = ((Math.floor(x / soil.cellSize) % soil.cols) + soil.cols) % soil.cols
-  const cy = ((Math.floor(y / soil.cellSize) % soil.rows) + soil.rows) % soil.rows
-  return cy * soil.cols + cx
+  col: number,
+  row: number,
+  worldWidth: number,
+  worldHeight: number,
+): void {
+  const x = col * soil.cellSize
+  const y = row * soil.cellSize
+  const w = Math.min(soil.cellSize, worldWidth - x)
+  const h = Math.min(soil.cellSize, worldHeight - y)
+  if (w <= 0 || h <= 0) return
+
+  ctx.strokeStyle = VISUAL_THEME.selectionRing
+  ctx.lineWidth = 2.5
+  ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3)
 }
 
 function drawWorld(
   ctx: CanvasRenderingContext2D,
   snapshot: WorldSnapshot,
-  selectedId: number | null,
+  selection: MapSelection | null,
   worldWidth: number,
   worldHeight: number,
 ): void {
-  const { plants, corpses, creatures, ponds, soil, stats } = snapshot
+  const { plants, corpses, creatures, terrain, soil, grass, stats } = snapshot
+  const selectedCreatureId = selection?.type === 'creature' ? selection.id : null
+  const selectedPlantId = selection?.type === 'plant' ? selection.id : null
+  const selectedSoil = selection?.type === 'soil' ? selection : null
 
-  ctx.fillStyle = '#0f1410'
+  ctx.fillStyle = VISUAL_THEME.canvasBackground
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
 
+  // Ground stack: soil (+ basin shading) → grass turf → surface water on top.
   drawSoilMoisture(ctx, soil, worldWidth, worldHeight)
+  drawTerrainHeight(ctx, terrain, worldWidth, worldHeight)
+  drawGrassCover(ctx, grass, worldWidth, worldHeight)
+  drawTerrainWater(ctx, terrain, worldWidth, worldHeight)
 
-  for (const pond of ponds) {
-    const margin = (pond.water > 0.5 ? pondRadius(pond) : pond.baseRadius * 0.55) + 8
-    for (const { ox, oy } of toroidalDisplayOffsets(pond.x, pond.y, margin, worldWidth, worldHeight)) {
-      drawPondAt(ctx, pond, ox, oy)
-    }
+  if (selectedSoil) {
+    drawSoilSelection(ctx, soil, selectedSoil.col, selectedSoil.row, worldWidth, worldHeight)
   }
 
   for (const plant of plants) {
+    if (plantKindFromDna(plant.dna) === 'grass') continue
     const margin = plantRadius(plant) + 8
-    const soilMoisture = soil.values[soilCellIndex(soil, plant.x, plant.y)]
+    const soilMoisture =
+      soil.values[soilCellAt(soil, plant.x, plant.y).index] / SOIL_CELL_WATER_CAPACITY
     for (const { ox, oy } of toroidalDisplayOffsets(plant.x, plant.y, margin, worldWidth, worldHeight)) {
-      drawPlantAt(ctx, plant, ox, oy, soilMoisture, stats.temperature, stats.season)
+      drawPlantAt(
+        ctx,
+        plant,
+        ox,
+        oy,
+        soilMoisture,
+        stats.temperature,
+        stats.season,
+        selectedPlantId,
+      )
     }
   }
 
@@ -542,7 +603,7 @@ function drawWorld(
     const traits = creatureTraits(creature)
     const margin = Math.max(traits.vision, traits.radius + 12)
     for (const { ox, oy } of toroidalDisplayOffsets(creature.x, creature.y, margin, worldWidth, worldHeight)) {
-      drawCreatureAt(ctx, creature, selectedId, ox, oy, worldWidth, worldHeight)
+      drawCreatureAt(ctx, creature, selectedCreatureId, ox, oy, worldWidth, worldHeight)
     }
   }
 }

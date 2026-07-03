@@ -6,6 +6,7 @@ import {
   INITIAL_HERBIVORES,
   PATHOGEN_CHAMPION_SPAWN_CHANCE,
   POND_BASE_RADIUS,
+  POND_DEFAULT_MAX_DEPTH,
   DAY_LENGTH_SECONDS,
   DAYS_PER_SEASON_YEAR,
   scaledDefaultTotalWater,
@@ -38,8 +39,10 @@ export type SimSettings = {
   pathogenChampionSpawnChance: number
   /** Saved pathogen genome id; empty = use auto pathogen champion. */
   pathogenFounderId: string
-  /** Pond base radius in pixels at full water (starting volume scales with area). */
+  /** Pond width in pixels (half-width of the main basin at world gen). */
   pondBaseRadius: number
+  /** Max standing water depth at the pond center in water units. */
+  pondMaxDepth: number
   /** Total water units in the closed cycle at reset (pond, soil, air, living). */
   totalWater: number
   /** Real-time seconds for one full day–night cycle at 1× speed (equinox length). */
@@ -69,6 +72,7 @@ export const DEFAULT_SIM_SETTINGS: SimSettings = {
   pathogenChampionSpawnChance: PATHOGEN_CHAMPION_SPAWN_CHANCE,
   pathogenFounderId: '',
   pondBaseRadius: POND_BASE_RADIUS,
+  pondMaxDepth: POND_DEFAULT_MAX_DEPTH,
   totalWater: scaledDefaultTotalWater(DEFAULT_WORLD_WIDTH, DEFAULT_WORLD_HEIGHT),
   dayLengthSeconds: DAY_LENGTH_SECONDS,
   daysPerSeasonYear: DAYS_PER_SEASON_YEAR,

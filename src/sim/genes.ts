@@ -56,7 +56,7 @@ export const HerbivoreGene = {
   CloseMateLeniency: 51,
   /** Pull toward nearby genetically similar creatures (group cohesion). */
   Cohesion: 52,
-  /** Hydration source bias: low = soil moisture, mid = both, high = pond water. */
+  /** Hydration source bias: low = pond, mid = both, high = grass & plant forage. */
   WaterSource: 53,
   /** Spatial recall for water and food — low = forgetful, high = remembers routes and patches. */
   Memory: 54,
@@ -64,7 +64,7 @@ export const HerbivoreGene = {
 
 export const HERBIVORE_GENE_COUNT = 55
 
-/** Mid gene value = generalist (drinks from soil and pond). */
+/** Mid gene value = generalist (pond and forage equally). */
 export const DEFAULT_WATER_SOURCE_GENE = 127
 /** Mid gene value = moderate recall (a few locations, average retention). */
 export const DEFAULT_MEMORY_GENE = 127
@@ -205,6 +205,8 @@ export type HerbivoreTraits = {
   cohesion: number
   /** 0–1 ability to hydrate from soil moisture at current location. */
   soilDrinking: number
+  /** 0–1 preference for grass dew and plant tissue water when thirsty. */
+  forageWaterPreference: number
   /** 0–1 ability to hydrate from pond water. */
   pondDrinking: number
   /** How many locations the creature can remember at once (0 = no memory). */

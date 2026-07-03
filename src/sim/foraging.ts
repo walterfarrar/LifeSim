@@ -1,13 +1,25 @@
+import { TREE_BITE_HARDINESS_OFFSET } from './config'
 import type { HerbivoreTraits, PlantTraits } from './genes'
 import { plantTraits } from './entities/plant'
+import type { PlantKind } from './plantKinds'
+import { plantKindFromDna } from './plantKinds'
 import type { Plant } from './types'
+
+function effectivePlantHardiness(
+  plant: Pick<PlantTraits, 'hardiness'>,
+  kind?: PlantKind,
+): number {
+  return plant.hardiness + (kind === 'tree' ? TREE_BITE_HARDINESS_OFFSET : 0)
+}
 
 /** How much of a bite gets through plant defenses (0–1). */
 export function plantBiteEffectiveness(
   creature: Pick<HerbivoreTraits, 'plantHardinessBreak'>,
   plant: Pick<PlantTraits, 'hardiness'>,
+  kind?: PlantKind,
 ): number {
-  const ratio = creature.plantHardinessBreak / (plant.hardiness + 0.18)
+  const hardiness = effectivePlantHardiness(plant, kind)
+  const ratio = creature.plantHardinessBreak / (hardiness + 0.18)
   return Math.max(0.05, Math.min(1, ratio))
 }
 
@@ -17,8 +29,9 @@ export function scorePlantFoodTarget(
   plant: Pick<PlantTraits, 'hardiness'>,
   dist: number,
   seekRange: number,
+  kind?: PlantKind,
 ): number {
-  const effectiveness = plantBiteEffectiveness(traits, plant)
+  const effectiveness = plantBiteEffectiveness(traits, plant, kind)
   const selectivity = traits.plantForageSelectivity
   const minEffectiveness = 0.05 + selectivity * 0.14
 
@@ -43,7 +56,13 @@ export function findBestPlantTarget(
     const dist = distTo(plant)
     if (dist >= seekRange) continue
 
-    const score = scorePlantFoodTarget(traits, plantTraits(plant), dist, seekRange)
+    const score = scorePlantFoodTarget(
+      traits,
+      plantTraits(plant),
+      dist,
+      seekRange,
+      plantKindFromDna(plant.dna),
+    )
     if (score < 0 || score <= bestScore) continue
 
     bestScore = score

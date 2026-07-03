@@ -138,12 +138,12 @@ export function StatsPanel({
           <dd>{stats.herbivoreCount}</dd>
         </div>
         <div>
-          <dt>Pond water</dt>
-          <dd title="Fresh water in the map pond — part of the closed water cycle">
-            {!stats.hasPond
+          <dt>Surface water</dt>
+          <dd title="Standing water in terrain depressions — separate from soil moisture">
+            {!stats.hasSurfaceWater
               ? 'None'
-              : stats.pondWater > 0.5
-                ? formatWaterUnits(stats.pondWater)
+              : stats.surfaceWater > 0.5
+                ? formatWaterUnits(stats.surfaceWater)
                 : 'Empty'}
           </dd>
         </div>
@@ -156,7 +156,7 @@ export function StatsPanel({
         </div>
         <div>
           <dt>Air water</dt>
-          <dd title="Atmospheric vapor — rain starts at 90% humidity, stops near 10%, and needs to dry to ~72% before the next storm">
+          <dd title="Atmospheric vapor — rain starts at 90% humidity, stops at 20%, re-arms after drying to ~72%">
             {formatWaterUnits(stats.airWater)}
             <span className="water-sub-label"> · {(stats.airHumidity * 100).toFixed(0)}% humidity</span>
             {stats.isRaining && <span className="rain-label"> · raining</span>}

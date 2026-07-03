@@ -68,7 +68,7 @@ export function ExpressedTraitsList({ traits, attackCooldown }: ExpressedTraitsL
       <div><dt>Contagion</dt><dd>{fmt(traits.contagion * 100, 0)}%</dd></div>
       <div><dt>Courtship eagerness</dt><dd>{fmt(traits.courtshipEagerness * 100, 0)}% toward sated</dd></div>
       <div><dt>Close mate leniency</dt><dd>{fmt(traits.closeMateLeniency * 100, 0)}% pickiness when adjacent</dd></div>
-      <div><dt>Plant water (forage)</dt><dd>{fmt((1 - traits.pondDrinking) * 100, 0)}% preference</dd></div>
+      <div><dt>Grass & plant water</dt><dd>{fmt(traits.forageWaterPreference * 100, 0)}% preference</dd></div>
       <div><dt>Pond drinking</dt><dd>{fmt(traits.pondDrinking * 100, 0)}%</dd></div>
       <div><dt>Memory slots</dt><dd>{traits.memorySlots}</dd></div>
       <div><dt>Memory recall</dt><dd>{fmt(traits.memoryRecall * 100, 0)}%</dd></div>
