@@ -539,9 +539,51 @@ button:hover {
 .map-hud-bottom {
   bottom: 1rem;
   left: 1rem;
-  right: auto;
-  max-width: min(100% - 2rem, 360px);
+  right: 1rem;
+  max-width: none;
   align-items: flex-start;
+}
+
+.map-hud-bottom-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 0.4rem;
+  width: 100%;
+  max-width: min(100%, 34rem);
+  position: relative;
+}
+
+.map-hud-legend-slot {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+}
+
+.map-hud-legend-slot.elevation-legend-open {
+  z-index: 12;
+}
+
+.map-hud-bottom-row .inspect-mode-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.elevation-legend-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  width: min(280px, calc(100vw - 2rem));
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #243528;
+  border-radius: 12px;
+  background: rgba(10, 15, 12, 0.96);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  pointer-events: auto;
 }
 
 .map-hud-row {
@@ -1251,14 +1293,50 @@ button:hover {
   max-width: min(340px, 100%);
 }
 
-.elevation-legend {
-  width: min(220px, 100%);
-  padding: 0.65rem 0.75rem;
-  border: 1px solid #243528;
-  border-radius: 12px;
-  background: rgba(10, 15, 12, 0.94);
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(4px);
+.elevation-legend-toggle {
+  position: relative;
+  z-index: 11;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: rgba(13, 18, 15, 0.92);
+  border: 1px solid #2a4034;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  color: #c8dcc8;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.elevation-legend-toggle:hover {
+  background: rgba(24, 34, 28, 0.96);
+  color: #e2ece4;
+}
+
+.elevation-legend-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.elevation-legend-close {
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid #2a4034;
+  border-radius: 6px;
+  background: rgba(20, 28, 24, 0.9);
+  color: #a8c0b0;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.elevation-legend-close:hover {
+  background: rgba(32, 44, 36, 0.95);
+  color: #e2ece4;
 }
 
 .elevation-legend-title {
@@ -1813,7 +1891,21 @@ button:hover {
     bottom: 0.4rem;
     left: 0.4rem;
     right: 0.4rem;
+  }
+
+  .map-hud-bottom-row {
     max-width: none;
+    gap: 0.3rem;
+  }
+
+  .map-hud-legend-slot .legend-toggle,
+  .elevation-legend-toggle {
+    padding: 0.35rem 0.65rem;
+    font-size: 0.78rem;
+  }
+
+  .elevation-legend-panel {
+    width: min(280px, calc(100vw - 0.8rem));
   }
 
   .map-hud-row {
@@ -1889,39 +1981,33 @@ button:hover {
   }
 
   .inspect-mode-bar {
-    width: 100%;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     padding: 0.3rem;
-    gap: 0.3rem;
+    gap: 0.25rem;
   }
 
   .inspect-mode-modes {
     flex: 1 1 auto;
     min-width: 0;
     display: flex;
-    gap: 0.3rem;
+    gap: 0.25rem;
   }
 
   .inspect-mode-modes button {
     flex: 1 1 0;
     min-width: 0;
-    padding: 0.35rem 0.4rem;
-    font-size: 0.72rem;
+    padding: 0.35rem 0.3rem;
+    font-size: 0.68rem;
   }
 
   .inspect-mode-bar button.elevation-toggle {
     flex: 0 0 auto;
-    padding: 0.35rem 0.5rem;
-    font-size: 0.72rem;
+    padding: 0.35rem 0.4rem;
+    font-size: 0.68rem;
   }
 
   .inspect-mode-divider {
     display: none;
-  }
-
-  .elevation-legend {
-    width: min(200px, 100%);
-    padding: 0.55rem 0.65rem;
   }
 
   .elevation-legend-title {
@@ -1934,7 +2020,7 @@ button:hover {
   }
 
   .visual-legend {
-    max-width: 100%;
+    max-width: none;
   }
 
   .sidebar {

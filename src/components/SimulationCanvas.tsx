@@ -47,7 +47,7 @@ import { pickCreatureAt } from './creatureHitTest'
 import { pickPlantAt } from './plantHitTest'
 import { soilCellAt } from './soilHitTest'
 import { VisualLegend } from './VisualLegend'
-import { ElevationLegend } from './ElevationLegend'
+import { ElevationLegendPanel, ElevationLegendToggle, useElevationLegendOpen } from './ElevationLegend'
 import { InspectModeBar } from './InspectModeBar'
 import { WindIndicator } from './WindIndicator'
 import type { InspectMode, MapSelection } from '../sim/mapSelection'
@@ -113,6 +113,7 @@ export function SimulationCanvas({
     temperature: 20,
   })
   const [windDisplay, setWindDisplay] = useState({ dir: 0, speed: 0 })
+  const [elevationLegendOpen, setElevationLegendOpen] = useElevationLegendOpen()
 
   const showCloudsRef = useRef(showClouds)
   const showElevationRef = useRef(showElevation)
@@ -430,13 +431,27 @@ export function SimulationCanvas({
         </div>
       </div>
       <div className="map-hud map-hud-bottom">
-        <InspectModeBar
-          mode={inspectMode}
-          onChange={onInspectModeChange}
-          showElevation={showElevation}
-          onToggleElevation={onToggleElevation}
-        />
-        {showElevation ? <ElevationLegend /> : <VisualLegend />}
+        <div className="map-hud-bottom-row">
+          <div className={`map-hud-legend-slot${elevationLegendOpen ? ' elevation-legend-open' : ''}`}>
+            {showElevation ? (
+              <ElevationLegendToggle
+                open={elevationLegendOpen}
+                onToggle={() => setElevationLegendOpen((open) => !open)}
+              />
+            ) : (
+              <VisualLegend />
+            )}
+          </div>
+          <InspectModeBar
+            mode={inspectMode}
+            onChange={onInspectModeChange}
+            showElevation={showElevation}
+            onToggleElevation={onToggleElevation}
+          />
+          {showElevation && elevationLegendOpen && (
+            <ElevationLegendPanel onClose={() => setElevationLegendOpen(false)} />
+          )}
+        </div>
       </div>
       <div
         ref={viewportRef}
