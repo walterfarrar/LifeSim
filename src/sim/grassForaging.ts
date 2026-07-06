@@ -136,9 +136,9 @@ export function forageGrassBite(
   const deliverable = totalWater * GRASS_WATER_HYDRATION_EFFICIENCY
   creature.hydration = capHydration(creature, creature.hydration + deliverable)
   const absorbed = creature.hydration - hydrationBefore
-  const waterUsed =
-    GRASS_WATER_HYDRATION_EFFICIENCY > 0 ? absorbed / GRASS_WATER_HYDRATION_EFFICIENCY : 0
-  atmosphere.vapor += Math.max(0, totalWater - waterUsed)
+  // The grass gave up `totalWater`; whatever the creature couldn't absorb (efficiency loss
+  // plus hydration overflow) vents to air instead of vanishing from the water budget.
+  atmosphere.vapor += Math.max(0, totalWater - absorbed)
 
   const gained = energyFromGrassBiomass(eaten, traits.forageEfficiency)
   creature.energy = capEnergy(creature, creature.energy + gained)
