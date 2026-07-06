@@ -1,6 +1,5 @@
 import {
   INIT_WATER_AIR_FRACTION,
-  INIT_WATER_POND_FRACTION,
   INIT_WATER_SOIL_FRACTION,
   PLANT_WATER_PER_ENERGY,
   SOIL_CELL_WATER_CAPACITY,
@@ -8,25 +7,24 @@ import {
 import { toroidalDistance } from './toroidal'
 import type { Creature } from './types'
 import type { Atmosphere } from './waterCycle'
+import type { AtmospherePool } from './transpiration'
 import type { SoilMoisture } from './soilMoisture'
 import type { SoilAccess } from './soilMoisture'
 import type { TerrainWater } from './terrainWater'
 
-/** Pull water units from soil then air — does not create water. */
+/** Pull water units from soil then the local air cell — does not create water. */
 export function pullWaterFromPools(
   x: number,
   y: number,
   need: number,
   soil: SoilAccess,
-  atmosphere: { vapor: number },
+  atmosphere: AtmospherePool,
 ): number {
   if (need <= 0) return 0
   const taken = soil.consume(x, y, need / SOIL_CELL_WATER_CAPACITY)
   let funded = taken * SOIL_CELL_WATER_CAPACITY
   if (funded < need) {
-    const fromAir = Math.min(need - funded, atmosphere.vapor)
-    atmosphere.vapor -= fromAir
-    funded += fromAir
+    funded += atmosphere.drawFrom(x, y, need - funded)
   }
   return funded
 }
@@ -35,7 +33,7 @@ export function pullWaterFromPools(
 export function fundInitialPlantStructuralWater(
   plant: { x: number; y: number; energy: number },
   soil: SoilAccess,
-  atmosphere: { vapor: number },
+  atmosphere: AtmospherePool,
 ): void {
   const need = plant.energy * PLANT_WATER_PER_ENERGY
   if (need <= 0) return
@@ -52,15 +50,16 @@ export function distributeInitialWorldWater(
   terrain: TerrainWater,
   atmosphere: Atmosphere,
 ): void {
-  const surfaceShare = totalWater * INIT_WATER_POND_FRACTION
   const soilShare = totalWater * INIT_WATER_SOIL_FRACTION
   const airShare = totalWater * INIT_WATER_AIR_FRACTION
 
-  const surfaceOverflow = surfaceShare - terrain.fillWithWaterUnits(surfaceShare)
-  const soilOverflow = soil.fillWithWaterUnits(soilShare + surfaceOverflow)
-  atmosphere.vapor = airShare + soilOverflow
-  atmosphere.raining = false
-  atmosphere.armedForRain = true
+  // Air and soil take their shares (each capped per cell); everything else — the pond share plus
+  // whatever air/soil couldn't hold — floods the surface, filling valleys into lakes. This lets
+  // the full requested water budget always fit: the land floods to hold the remainder.
+  const airOverflow = atmosphere.fillUniform(airShare)
+  const soilOverflow = soil.fillWithWaterUnits(soilShare)
+  const surfaceUnits = totalWater - (airShare - airOverflow) - (soilShare - soilOverflow)
+  terrain.floodToVolume(surfaceUnits)
 }
 
 function nearestSurfaceWater(creature: Creature, terrain: TerrainWater): { x: number; y: number } | null {
@@ -78,9 +77,7 @@ export function fundInitialCreatureHydration(
     const target = creature.hydration
     let funded = 0
 
-    const fromAir = Math.min(target - funded, atmosphere.vapor)
-    atmosphere.vapor -= fromAir
-    funded += fromAir
+    funded += atmosphere.drawFrom(creature.x, creature.y, target - funded)
 
     if (funded < target) {
       const waterCell = nearestSurfaceWater(creature, terrain)

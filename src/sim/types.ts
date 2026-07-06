@@ -110,6 +110,8 @@ export interface WorldStats {
   hasSurfaceWater: boolean
   /** Total water units in atmospheric vapor. */
   airWater: number
+  /** Vapor amount at 100% relative humidity (scales with total water budget). */
+  airWaterCapacity: number
   /** Total water units across all soil cells. */
   soilWater: number
   /** Total water stored in living creatures (hydration). */
@@ -121,9 +123,11 @@ export interface WorldStats {
   /** Total water locked at world reset — use to spot conservation drift. */
   totalWaterBudget: number
   avgSoilMoisture: number
-  /** Atmospheric vapor as fraction of capacity (relative humidity). */
+  /** Atmospheric vapor as fraction of capacity (average relative humidity). */
   airHumidity: number
   isRaining: boolean
+  /** Prevailing wind driving the air-moisture grid: direction (radians) and speed (px/tick). */
+  wind: { dir: number; speed: number }
   /** 0–1 position in the current day (0.5 = noon). */
   dayPhase: number
   /** 0–1 photosynthetic sunlight this tick. */
@@ -139,6 +143,19 @@ export interface WorldStats {
   deathCauseCounts: DeathCauseCounts
 }
 
+/** Read-only view of the moving air-moisture grid for rendering clouds. */
+export interface AirGridSnapshot {
+  cols: number
+  rows: number
+  cellSize: number
+  /** Vapor units per cell (0 … cellCapacity). */
+  vapor: Float32Array
+  cellCapacity: number
+  /** Continuous wind offset of the whole field (world px), wrapped at the map edges. */
+  offsetX: number
+  offsetY: number
+}
+
 export interface WorldSnapshot {
   plants: readonly Plant[]
   corpses: readonly Corpse[]
@@ -146,6 +163,7 @@ export interface WorldSnapshot {
   terrain: TerrainWaterSnapshot
   soil: SoilMoistureSnapshot
   grass: GrassCoverSnapshot
+  air: AirGridSnapshot
   pathogens: readonly Pathogen[]
   stats: WorldStats
 }

@@ -60,6 +60,8 @@ function App() {
   const [maxTickReached, setMaxTickReached] = useState(0)
   const [inspectMode, setInspectMode] = useState<InspectMode>('creature')
   const [selection, setSelection] = useState<MapSelection | null>(null)
+  const [showClouds, setShowClouds] = useState(true)
+  const [showElevation, setShowElevation] = useState(false)
   const [autoChampion, setAutoChampion] = useState<AutoChampionRecord | null>(() => loadAutoChampionRecord())
   const [autoPlantChampion, setAutoPlantChampion] = useState<AutoPlantChampionRecord | null>(() =>
     loadAutoPlantChampionRecord(),
@@ -250,6 +252,7 @@ function App() {
     surfaceWater: 0,
     hasSurfaceWater: false,
     airWater: 0,
+    airWaterCapacity: 0,
     soilWater: 0,
     creatureWater: 0,
     plantWater: 0,
@@ -258,6 +261,7 @@ function App() {
     avgSoilMoisture: 0,
     airHumidity: 0,
     isRaining: false,
+    wind: { dir: 0, speed: 0 },
     deathCauseCounts: createEmptyDeathCauseCounts(),
     dayPhase: 0.3,
     sunlight: 0.85,
@@ -307,9 +311,13 @@ function App() {
           settings={activeSettings}
           inspectMode={inspectMode}
           selection={selection}
+          showClouds={showClouds}
+          showElevation={showElevation}
           onSnapshot={onSnapshot}
           onSelect={setSelection}
           onInspectModeChange={handleInspectModeChange}
+          onToggleClouds={() => setShowClouds((prev) => !prev)}
+          onToggleElevation={() => setShowElevation((prev) => !prev)}
         />
         {selectedCreature && (
           <CreatureInspector

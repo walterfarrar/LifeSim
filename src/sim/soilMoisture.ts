@@ -128,9 +128,14 @@ export class SoilMoisture implements SoilAccess {
     return sum
   }
 
-  /** Evaporates water from cells; returns total water moved to atmosphere. */
+  /**
+   * Evaporates water from cells into the air above. `accept` deposits into the local air cell
+   * and returns how much it could hold, so only the accepted amount leaves the soil (evaporation
+   * self-limits when the air above is saturated). Returns total water moved to the atmosphere.
+   */
   evaporateToAtmosphere(
     baseRatePerCell: number,
+    accept: (x: number, y: number, amount: number) => number,
     cellFilter?: (index: number) => boolean,
   ): number {
     let total = 0
@@ -138,9 +143,15 @@ export class SoilMoisture implements SoilAccess {
       if (cellFilter && !cellFilter(i)) continue
       const wetness = this.values[i] / SOIL_CELL_WATER_CAPACITY
       const rate = baseRatePerCell * (0.25 + wetness * 0.75)
-      const evap = Math.min(this.values[i], rate)
-      this.values[i] -= evap
-      total += evap
+      const want = Math.min(this.values[i], rate)
+      if (want <= 0) continue
+      const cx = i % this.cols
+      const cy = Math.floor(i / this.cols)
+      const x = (cx + 0.5) * this.cellSize
+      const y = (cy + 0.5) * this.cellSize
+      const accepted = accept(x, y, want)
+      this.values[i] -= accepted
+      total += accepted
     }
     return total
   }

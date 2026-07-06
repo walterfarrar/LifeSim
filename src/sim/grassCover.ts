@@ -249,7 +249,7 @@ export class GrassCover {
     return placed
   }
 
-  fundStructuralWaterFromSoil(index: number, soil: SoilAccess, atmosphere: { vapor: number }): void {
+  fundStructuralWaterFromSoil(index: number, soil: SoilAccess, atmosphere: AtmospherePool): void {
     const need = this.energy[index] * PLANT_WATER_PER_ENERGY
     if (need <= 0) return
     const { x, y } = this.cellCenter(index)
@@ -264,7 +264,7 @@ export class GrassCover {
     index: number,
     energyLost: number,
     soil: SoilAccess,
-    atmosphere: { vapor: number },
+    atmosphere: AtmospherePool,
   ): void {
     if (energyLost <= 0) return
     this.releaseTranspiration(index, energyLost * PLANT_WATER_PER_ENERGY, soil, atmosphere)
@@ -288,7 +288,7 @@ export class GrassCover {
   private uptakeSoilWater(
     index: number,
     soil: SoilAccess,
-    atmosphere: { vapor: number },
+    atmosphere: AtmospherePool,
     season: SeasonName,
     temperature: number,
   ): void {
@@ -322,7 +322,7 @@ export class GrassCover {
   tick(
     rng: Rng,
     soil: SoilAccess,
-    atmosphere: { vapor: number },
+    atmosphere: AtmospherePool,
     season: SeasonName,
     sunlight: number,
     temperature: number,
@@ -364,7 +364,7 @@ export class GrassCover {
     temperature: number,
     season: SeasonName,
     shadeTrees: readonly Plant[],
-    atmosphere: { vapor: number },
+    atmosphere: AtmospherePool,
   ): number {
     const dna = this.dnaByCell[index]
     if (!dna) return 0
@@ -423,7 +423,7 @@ export class GrassCover {
     index: number,
     fraction: number,
     soil: SoilAccess,
-    atmosphere: { vapor: number },
+    atmosphere: AtmospherePool,
   ): void {
     if (fraction <= 0 || this.energy[index] <= GRASS_MIN_LIVE_ENERGY) return
     const budgetLeft = GRASS_MAX_TICK_LOSS_FRACTION - this.tickLossBudget[index]
@@ -438,7 +438,7 @@ export class GrassCover {
     index: number,
     fraction: number,
     soil: SoilAccess,
-    atmosphere: { vapor: number },
+    atmosphere: AtmospherePool,
   ): void {
     if (fraction <= 0 || this.energy[index] <= GRASS_MIN_LIVE_ENERGY) return
     this.applyBiomassLoss(index, Math.min(GRASS_MAX_TICK_LOSS_FRACTION, fraction), soil, atmosphere)
@@ -448,7 +448,7 @@ export class GrassCover {
     index: number,
     fraction: number,
     soil: SoilAccess,
-    atmosphere: { vapor: number },
+    atmosphere: AtmospherePool,
   ): void {
     if (fraction <= 0 || this.energy[index] <= GRASS_MIN_LIVE_ENERGY) return
     const beforeEnergy = this.energy[index]
@@ -466,7 +466,7 @@ export class GrassCover {
     season: SeasonName,
     temperature: number,
     soil: SoilAccess,
-    atmosphere: { vapor: number },
+    atmosphere: AtmospherePool,
   ): void {
     const dna = this.dnaByCell[index]
     if (!dna || this.energy[index] <= GRASS_MIN_LIVE_ENERGY) return
@@ -520,7 +520,7 @@ export class GrassCover {
   private applyDrought(
     index: number,
     soil: SoilAccess,
-    atmosphere: { vapor: number },
+    atmosphere: AtmospherePool,
     season: SeasonName,
     temperature: number,
   ): void {
@@ -570,7 +570,7 @@ export class GrassCover {
     releaseTranspiredWater(atmosphere, soil, x, y, waterUnits)
   }
 
-  private cullBare(soil: SoilAccess, atmosphere: { vapor: number }): void {
+  private cullBare(soil: SoilAccess, atmosphere: AtmospherePool): void {
     for (let i = 0; i < this.energy.length; i++) {
       if (this.isLiveTurf(i)) continue
       if (this.water[i] > 0 || this.energy[i] > 0 || this.dnaByCell[i]) {
@@ -606,7 +606,7 @@ export class GrassCover {
   private tickSpread(
     rng: Rng,
     soil: SoilAccess,
-    atmosphere: { vapor: number },
+    atmosphere: AtmospherePool,
     season: SeasonName,
     maxCells: number,
   ): void {
@@ -653,7 +653,7 @@ export class GrassCover {
       this.releaseStructuralWater(parentIdx, seedCost, soil, atmosphere)
       const seedWater = Math.min(this.water[parentIdx], seedCost * PLANT_WATER_PER_ENERGY)
       this.water[parentIdx] = Math.max(0, this.water[parentIdx] - seedWater)
-      atmosphere.vapor += seedWater * 0.05
+      atmosphere.vent(x, y, seedWater * 0.05)
 
       this.dnaByCell[neighborIdx] = childDna
       this.energy[neighborIdx] = seedCost * 0.95
@@ -711,7 +711,7 @@ export class GrassCover {
   tryWindReseed(
     rng: Rng,
     soil: SoilAccess,
-    atmosphere: { vapor: number },
+    atmosphere: AtmospherePool,
     chance: number,
     maxCells: number,
   ): boolean {
@@ -731,7 +731,7 @@ export class GrassCover {
   applyDrowning(
     terrain: TerrainWater,
     soil: SoilAccess,
-    atmosphere: { vapor: number },
+    atmosphere: AtmospherePool,
     raining = false,
   ): void {
     for (let i = 0; i < this.energy.length; i++) {
@@ -746,7 +746,7 @@ export class GrassCover {
     }
   }
 
-  releaseDeadWater(index: number, soil: SoilAccess, atmosphere: { vapor: number }): void {
+  releaseDeadWater(index: number, soil: SoilAccess, atmosphere: AtmospherePool): void {
     const hydric = turfHydricWater(this.energy[index], this.water[index])
     if (hydric <= 0) {
       this.clearCell(index)
@@ -756,7 +756,7 @@ export class GrassCover {
     const toSoil = hydric * 0.1
     const toAir = hydric * 0.9
     const soilApplied = soil.depositWater(x, y, toSoil)
-    atmosphere.vapor += toAir + (toSoil - soilApplied)
+    atmosphere.vent(x, y, toAir + (toSoil - soilApplied))
     this.clearCell(index)
   }
 }

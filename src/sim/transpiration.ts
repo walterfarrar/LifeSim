@@ -1,13 +1,18 @@
-import { RAIN_TRANSPIRATION_TO_AIR } from './config'
 import type { SoilAccess } from './soilMoisture'
 
-/** Minimal atmosphere interface for transpiration routing. */
+/** Minimal atmosphere interface: a positional vapor sink/source. */
 export type AtmospherePool = {
-  vapor: number
-  raining?: boolean
+  /** Deposit water into the sky at a world position; overflow routes to surface then soil. */
+  vent(x: number, y: number, units: number): number
+  /** Pull up to `units` of vapor from the air cell over a world position; returns amount taken. */
+  drawFrom(x: number, y: number, units: number): number
 }
 
-/** Route transpiration overflow to soil first; nothing leaves the water budget. */
+/**
+ * Route transpired water to soil first (roots' immediate surroundings), then vent the rest
+ * into the local sky. `vent` guarantees the remainder lands somewhere, so nothing leaves the
+ * water budget.
+ */
 export function releaseTranspiredWater(
   atmosphere: AtmospherePool,
   soil: SoilAccess,
@@ -21,16 +26,5 @@ export function releaseTranspiredWater(
   remaining -= soil.depositWater(x, y, remaining)
   if (remaining <= 0) return
 
-  const airFraction = atmosphere.raining ? RAIN_TRANSPIRATION_TO_AIR : 1
-  const toAir = remaining * airFraction
-  atmosphere.vapor += toAir
-  remaining -= toAir
-
-  if (remaining > 0) {
-    remaining -= soil.depositWater(x, y, remaining)
-  }
-
-  if (remaining > 0) {
-    atmosphere.vapor += remaining
-  }
+  atmosphere.vent(x, y, remaining)
 }

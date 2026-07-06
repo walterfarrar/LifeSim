@@ -13,10 +13,6 @@ const SEASON_BORDER_RGB: Record<SeasonName, readonly [number, number, number]> =
 }
 
 export const VIEWPORT_BORDER_RING_WIDTH = 6
-/** Rain vignette depth from window edge toward center (px). */
-export const VIEWPORT_RAIN_VIGNETTE_WIDTH = 128
-/** Peak opacity at the window edge when raining. */
-export const VIEWPORT_RAIN_EDGE_ALPHA = 0.58
 
 export function dayLengthTicks(dayLengthSeconds: number): number {
   return Math.max(TICKS_PER_SECOND, Math.round(dayLengthSeconds * TICKS_PER_SECOND))
@@ -99,23 +95,15 @@ export function computeDayBorder(_sunlight: number, dayPhase: number): ViewportB
   }
 }
 
-/** Inner ring — visible while raining. */
-export function computeRainBorder(isRaining: boolean): ViewportBorderRing | null {
-  if (!isRaining) return null
-  return { r: 72, g: 158, b: 255, alpha: 0.92 }
-}
-
 export function applyViewportAmbienceStyle(
   element: HTMLElement,
   sunlight: number,
   season: SeasonName,
   dayPhase: number,
-  isRaining: boolean,
 ): void {
   const ringW = VIEWPORT_BORDER_RING_WIDTH
   const seasonRing = computeSeasonBorder(season)
   const dayRing = computeDayBorder(sunlight, dayPhase)
-  const rainRing = computeRainBorder(isRaining)
 
   element.style.setProperty('--border-season-r', String(seasonRing.r))
   element.style.setProperty('--border-season-g', String(seasonRing.g))
@@ -127,16 +115,8 @@ export function applyViewportAmbienceStyle(
   element.style.setProperty('--border-day-b', String(dayRing.b))
   element.style.setProperty('--border-day-alpha', dayRing.alpha.toFixed(3))
 
-  if (rainRing) {
-    element.style.setProperty('--border-rain-r', String(rainRing.r))
-    element.style.setProperty('--border-rain-g', String(rainRing.g))
-    element.style.setProperty('--border-rain-b', String(rainRing.b))
-    element.style.setProperty('--border-rain-edge-alpha', VIEWPORT_RAIN_EDGE_ALPHA.toFixed(3))
-    element.style.setProperty('--border-rain-width', `${VIEWPORT_RAIN_VIGNETTE_WIDTH}px`)
-    element.style.setProperty('--border-rain-vignette-opacity', '1')
-  } else {
-    element.style.setProperty('--border-rain-vignette-opacity', '0')
-  }
+  // Rain no longer drives a global edge vignette — clouds/rain are per-tile now.
+  element.style.setProperty('--border-rain-vignette-opacity', '0')
 
   // Smallest spread sits outermost (window edge); larger spreads stack inward.
   element.style.setProperty('--border-season-spread', `${ringW}px`)

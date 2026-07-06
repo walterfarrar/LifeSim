@@ -133,7 +133,7 @@ export function transferPlantSeedWater(
   const seedWater = Math.min(parent.water, seedCost * PLANT_WATER_PER_ENERGY)
   parent.water = Math.max(0, parent.water - seedWater)
   child.water = seedWater * 0.95
-  atmosphere.vapor += seedWater * 0.05
+  atmosphere.vent(parent.x, parent.y, seedWater * 0.05)
 }
 
 export function plantSpreadRange(parent: Plant, season: SeasonName): { min: number; max: number } {
@@ -375,7 +375,7 @@ export function foragePlantBite(
   creature: Creature,
   plant: Plant,
   amount: number,
-  atmosphere: { vapor: number },
+  atmosphere: AtmospherePool,
 ): number {
   const { eaten, waterReleased } = bitePlant(plant, amount)
   if (eaten <= 0) return 0
@@ -383,7 +383,7 @@ export function foragePlantBite(
   const traits = creatureTraits(creature)
   const hydrationBefore = creature.hydration
   creature.hydration = capHydration(creature, creature.hydration + waterReleased)
-  atmosphere.vapor += Math.max(0, waterReleased - (creature.hydration - hydrationBefore))
+  atmosphere.vent(plant.x, plant.y, Math.max(0, waterReleased - (creature.hydration - hydrationBefore)))
 
   const gained = energyFromPlantBiomass(eaten, traits.forageEfficiency)
   creature.energy = capEnergy(creature, creature.energy + gained)

@@ -9,7 +9,7 @@ import {
   SURFACE_BALANCE_PASSES,
   SURFACE_EVAP_BASE,
   SURFACE_EVAPORATION_SCALE,
-  SURFACE_FLOW_RATE,
+  SURFACE_FLOW_RELAX,
   SURFACE_INFILTRATION_RATE,
   SURFACE_INFILTRATION_RAIN_MULT,
   SURFACE_LEVEL_TOLERANCE,
@@ -28,6 +28,7 @@ import {
   TERRAIN_HILL_COUNT_MAX,
   TERRAIN_HILL_COUNT_MIN,
   TERRAIN_POND_CARVE_DEPTH,
+  WATER_UNITS_PER_ELEVATION,
   TERRAIN_ROLLING_AMPLITUDE,
   TERRAIN_ROLLING_WAVELENGTH_MAX,
   TERRAIN_ROLLING_WAVELENGTH_MIN,
@@ -485,8 +486,17 @@ export class TerrainWater {
     return this.distributeWaterAtUniformRate(waterUnits, (idx) => this.isSurfaceBucket(idx))
   }
 
-  /** Each wet tile loses water at the same rate — like identical buckets, regardless of depth. */
-  evaporateToAir(tempC: number, relativeHumidity: number, raining: boolean): number {
+  /**
+   * Each wet tile loses water at the same rate — like identical buckets, regardless of depth.
+   * `accept` moves the evaporated water into the air cell above and returns how much the air
+   * could hold; only that much leaves the surface (evaporation self-limits at saturation).
+   */
+  evaporateToAir(
+    tempC: number,
+    relativeHumidity: number,
+    raining: boolean,
+    accept: (x: number, y: number, amount: number) => number,
+  ): number {
     if (raining) return 0
     const evapMult = localSurfaceEvaporationRate(tempC, relativeHumidity)
     const rate = SURFACE_EVAP_BASE * evapMult
@@ -494,16 +504,98 @@ export class TerrainWater {
     for (let i = 0; i < this.surfaceWater.length; i++) {
       const depth = this.surfaceWater[i]
       if (depth <= 0) continue
-      const evap = Math.min(depth, rate)
-      this.surfaceWater[i] -= evap
-      total += evap
+      const want = Math.min(depth, rate)
+      if (want <= 0) continue
+      const cx = i % this.cols
+      const cy = Math.floor(i / this.cols)
+      const { x, y } = this.cellWorldCenter(cx, cy)
+      const accepted = accept(x, y, want)
+      this.surfaceWater[i] -= accepted
+      total += accepted
     }
     return total
   }
 
+  /** Add standing water at a world position. Land can flood, so this is uncapped; returns units. */
+  depositSurfaceAt(x: number, y: number, units: number): number {
+    if (units <= 0) return 0
+    this.surfaceWater[this.cellIndex(x, y)] += units
+    return units
+  }
+
+  /**
+   * Flood the terrain with `units` of surface water, filling the lowest ground first up to a
+   * single water-surface level (valleys become lakes; excess raises the level over everything).
+   * Overwrites the current surface-water field. Places exactly `units` (conserves the budget).
+   */
+  floodToVolume(units: number): void {
+    this.surfaceWater.fill(0)
+    if (units <= 0) return
+
+    const n = this.height.length
+    // Ground height expressed in water-depth units so the flood level is on one common axis.
+    const groundUnits = (i: number) => this.height[i] * WATER_UNITS_PER_ELEVATION
+    let minH = Infinity
+    let maxH = -Infinity
+    for (let i = 0; i < n; i++) {
+      const g = groundUnits(i)
+      if (g < minH) minH = g
+      if (g > maxH) maxH = g
+    }
+
+    const volumeAt = (level: number): number => {
+      let v = 0
+      for (let i = 0; i < n; i++) {
+        const d = level - groundUnits(i)
+        if (d > 0) v += d
+      }
+      return v
+    }
+
+    // If the requested volume tops the highest ground, the level sits a uniform slab above it.
+    const volAtMax = volumeAt(maxH)
+    let hiLevel = maxH
+    if (units > volAtMax) {
+      hiLevel = maxH + (units - volAtMax) / n
+    }
+
+    let loLevel = minH
+    for (let iter = 0; iter < 64; iter++) {
+      const mid = (loLevel + hiLevel) / 2
+      if (volumeAt(mid) < units) loLevel = mid
+      else hiLevel = mid
+    }
+
+    const level = (loLevel + hiLevel) / 2
+    for (let i = 0; i < n; i++) {
+      this.surfaceWater[i] = Math.max(0, level - groundUnits(i))
+    }
+  }
+
+  /**
+   * Level surface water toward hydrostatic equilibrium: each tick, water flows across tile edges
+   * from the higher water surface (elevation + depth) to the lower one, evening the two out. Land
+   * floods freely — there is no per-tile depth cap. Conserves total water.
+   */
+  tickSurfaceFlow(): void {
+    if (SURFACE_FLOW_RELAX <= 0) return
+    for (let pass = 0; pass < SURFACE_BALANCE_PASSES; pass++) {
+      const next = new Float32Array(this.surfaceWater)
+      for (let cy = 0; cy < this.rows; cy++) {
+        for (let cx = 0; cx < this.cols; cx++) {
+          const idx = cy * this.cols + cx
+          // Process each undirected edge once (east + south neighbor) to avoid double-counting.
+          this.flowEqualize(idx, this.wrapCell(cy, cx + 1), next)
+          this.flowEqualize(idx, this.wrapCell(cy + 1, cx), next)
+        }
+      }
+      this.surfaceWater.set(next)
+    }
+  }
+
   /** Neighbors spill into a tile after drinking lowers its water level. */
   private spillToCell(cellIdx: number): void {
-    if (SURFACE_FLOW_RATE <= 0) return
+    if (SURFACE_FLOW_RELAX <= 0) return
 
     const cy = Math.floor(cellIdx / this.cols)
     const cx = cellIdx % this.cols
@@ -511,54 +603,31 @@ export class TerrainWater {
     for (let pass = 0; pass < SURFACE_BALANCE_PASSES; pass++) {
       const next = new Float32Array(this.surfaceWater)
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-        const nIdx = this.wrapCell(cy + dy, cx + dx)
-        this.balanceSurfaceBetween(cellIdx, nIdx, next)
+        this.flowEqualize(cellIdx, this.wrapCell(cy + dy, cx + dx), next)
       }
       this.surfaceWater.set(next)
     }
   }
 
-  private waterSurface(idx: number, depths: Float32Array): number {
-    return this.height[idx] + depths[idx]
-  }
-
-  private balanceSurfaceBetween(fromIdx: number, toIdx: number, next: Float32Array): void {
-    const surfaceFrom = this.waterSurface(fromIdx, next)
-    const surfaceTo = this.waterSurface(toIdx, next)
-    const delta = surfaceFrom - surfaceTo
+  /** Move water between two tiles toward equal water-surface height (uncapped, downhill). */
+  private flowEqualize(aIdx: number, bIdx: number, next: Float32Array): void {
+    // Water surface = ground (converted to water units) + standing depth, so flow follows the
+    // true downhill gradient instead of being swamped by the tiny raw elevation scale.
+    const surfA = this.height[aIdx] * WATER_UNITS_PER_ELEVATION + next[aIdx]
+    const surfB = this.height[bIdx] * WATER_UNITS_PER_ELEVATION + next[bIdx]
+    const delta = surfA - surfB
     if (Math.abs(delta) <= SURFACE_LEVEL_TOLERANCE) return
 
-    if (delta > 0) {
-      this.transferTowardSurface(fromIdx, toIdx, next, surfaceFrom, surfaceTo)
-    } else {
-      this.transferTowardSurface(toIdx, fromIdx, next, surfaceTo, surfaceFrom)
-    }
-  }
+    const hi = delta > 0 ? aIdx : bIdx
+    if (next[hi] <= 0) return
 
-  private transferTowardSurface(
-    fromIdx: number,
-    toIdx: number,
-    next: Float32Array,
-    highSurface: number,
-    lowSurface: number,
-  ): void {
-    if (next[fromIdx] <= 0) return
+    // Moving w from hi→lo changes each surface by ∓w, so w = |delta|/2 equalizes them exactly.
+    const transfer = Math.min(next[hi], (Math.abs(delta) / 2) * SURFACE_FLOW_RELAX)
+    if (transfer <= 1e-5) return
 
-    const head = (highSurface - lowSurface) / TERRAIN_ELEVATION_SPAN
-    const targetDepth = Math.min(this.maxSurfaceWater[toIdx], highSurface - this.height[toIdx])
-    const room = Math.max(0, targetDepth - next[toIdx])
-    if (room <= 0) return
-
-    const transfer = Math.min(
-      next[fromIdx],
-      room,
-      SURFACE_FLOW_RATE * head * 40,
-      next[fromIdx] * 0.45,
-    )
-    if (transfer <= 1e-4) return
-
-    next[fromIdx] -= transfer
-    next[toIdx] += transfer
+    const lo = delta > 0 ? bIdx : aIdx
+    next[hi] -= transfer
+    next[lo] += transfer
   }
 
   /** Surface water slowly soaks into soil when the soil column has room. */

@@ -104,7 +104,7 @@ export const POND_EVAP_BASE = 0.12
 export const SOIL_CELL_SIZE = 64
 export const SOIL_MAX_MOISTURE = 1
 /** Water units stored at full saturation (moisture = 1). */
-export const SOIL_CELL_WATER_CAPACITY = 40
+export const SOIL_CELL_WATER_CAPACITY = 10
 /** Starting moisture in every soil cell on reset. */
 export const SOIL_BASELINE_MOISTURE = 0.28
 /** Base moisture-fraction evaporation per cell per tick at reference temp/humidity. */
@@ -131,8 +131,14 @@ export const INIT_POND_SHORE_TRANSFER = 0.12
 
 /** Terrain surface-water layer (shares soil cell grid). Depths are in abstract water units. */
 export const SURFACE_FLOW_RATE = 2.8
-/** Lateral spill passes after a creature drinks — neighbors level into the tile. */
+/** Relaxation passes per tick for surface-water flow (higher = faster leveling, more cost). */
 export const SURFACE_BALANCE_PASSES = 6
+/**
+ * Fraction of the equalizing volume moved across each tile edge per pass. Land can flood above
+ * its elevation; water always flows toward the lower water surface (elevation + depth) and evens
+ * out. 0.5 fully equals a pair in one pass; lower is gentler/more stable across many neighbors.
+ */
+export const SURFACE_FLOW_RELAX = 0.25
 /** Stop transferring when neighbor water surfaces are within this distance. */
 export const SURFACE_LEVEL_TOLERANCE = 0.05
 export const SURFACE_INFILTRATION_RATE = 0.011
@@ -168,6 +174,13 @@ export const TERRAIN_ELEVATION_SEA_LEVEL = (TERRAIN_ELEVATION_MIN + TERRAIN_ELEV
 export const TERRAIN_ELEVATION_FEET_PER_UNIT = 50
 /** Pond carve subtracted from flow elevation (same units as elevation). */
 export const TERRAIN_POND_CARVE_DEPTH = 2.8
+/**
+ * Water-depth units equal to one elevation unit. Elevation is a 0–10 abstract scale while
+ * surface-water depth is in water units (a pond holds tens), so hydrostatic flow must convert
+ * ground height into water units before comparing water-surface heights. Chosen so the pond's
+ * 2.8-unit carve is ~62 water units deep — a proper basin that fills before it overflows.
+ */
+export const WATER_UNITS_PER_ELEVATION = 22
 /** Max standing depth on non-pond tiles — equals elevation span (lower ground holds more). */
 export const SURFACE_PUDDLE_MAX_DEPTH = TERRAIN_ELEVATION_MAX
 /** Max standing depth at the pond center — rim still blends to puddle depths (0–10). */
@@ -186,18 +199,26 @@ export function scaledDefaultTotalWater(width: number, height: number): number {
   return Math.round(DEFAULT_TOTAL_WATER * scale)
 }
 
-/** Reference vapor capacity at {@link DEFAULT_TOTAL_WATER}; scales with the water budget. */
-export const ATMOSPHERE_VAPOR_CAPACITY = 8_000
-export const ATMOSPHERE_INITIAL_VAPOR = 900
+/**
+ * Air-moisture grid — its own cell size so clouds can be coarser than the soil grid.
+ * The whole field drifts with wind and wraps at the map edges.
+ */
+export const AIR_CELL_SIZE_MULT = 6
+export const AIR_CELL_SIZE = SOIL_CELL_SIZE * AIR_CELL_SIZE_MULT
+/** Water units a single air cell holds at 100% relative humidity (scales with tile size). */
+export const AIR_CELL_WATER_CAPACITY = 20 * AIR_CELL_SIZE_MULT
 
-/** Keep starting humidity ~32% when total water changes (8% of budget / scaled capacity). */
-export function scaledAtmosphereVaporCapacity(totalWater: number): number {
-  return ATMOSPHERE_VAPOR_CAPACITY * (totalWater / DEFAULT_TOTAL_WATER)
-}
+/** Wind advection — world px/tick the whole air field drifts, evolving by a slow random walk. */
+export const WIND_MAX_SPEED = 0.9
+export const WIND_MIN_SPEED = 0.12
+/** Per-tick random-walk step for wind speed (world px/tick) and direction (radians). */
+export const WIND_SPEED_DRIFT = 0.01
+export const WIND_DIR_DRIFT = 0.025
+
 /** Relative humidity (0–1) at which rain begins. */
 export const RAIN_START_HUMIDITY = 0.9
 /** Relative humidity (0–1) at which rain stops (most vapor has precipitated out). */
-export const RAIN_STOP_HUMIDITY = 0.2
+export const RAIN_STOP_HUMIDITY = 0.05
 /** Humidity must drop below this before another storm can begin. */
 export const RAIN_ARM_HUMIDITY = 0.72
 /** Fraction of vapor above the stop level precipitated each tick while raining. */

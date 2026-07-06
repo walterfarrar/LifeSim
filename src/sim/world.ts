@@ -131,7 +131,6 @@ import {
   PLANT_WATER_PER_ENERGY,
   SOIL_CELL_SIZE,
   SOIL_REPRO_MIN_MOISTURE,
-  scaledAtmosphereVaporCapacity,
 } from './config'
 import { classifyDeathCause, createEmptyDeathCauseCounts } from './deathCause'
 import {
@@ -195,6 +194,7 @@ export class World {
     surfaceWater: 0,
     hasSurfaceWater: false,
     airWater: 0,
+    airWaterCapacity: 0,
     soilWater: 0,
     creatureWater: 0,
     plantWater: 0,
@@ -203,6 +203,7 @@ export class World {
     avgSoilMoisture: 0,
     airHumidity: 0,
     isRaining: false,
+    wind: { dir: 0, speed: 0 },
     deathCauseCounts: createEmptyDeathCauseCounts(),
     dayPhase: 0.3,
     sunlight: sunlightFactor(0.3),
@@ -246,7 +247,8 @@ export class World {
     this.grass = new GrassCover(SOIL_CELL_SIZE)
     this.terrain = new TerrainWater(SOIL_CELL_SIZE)
     this.terrain.generate(this.rng, this.settings.pondBaseRadius, this.settings.pondMaxDepth)
-    this.atmosphere = new Atmosphere(scaledAtmosphereVaporCapacity(this.settings.totalWater))
+    this.atmosphere = new Atmosphere()
+    this.atmosphere.attach(this.terrain, this.soil, this.rng)
     distributeInitialWorldWater(
       this.settings.totalWater,
       this.soil,
@@ -277,6 +279,7 @@ export class World {
       surfaceWater: 0,
       hasSurfaceWater: false,
       airWater: 0,
+      airWaterCapacity: 0,
       soilWater: 0,
       creatureWater: 0,
       plantWater: 0,
@@ -285,6 +288,7 @@ export class World {
       avgSoilMoisture: 0,
       airHumidity: 0,
       isRaining: false,
+      wind: { dir: 0, speed: 0 },
       deathCauseCounts: createEmptyDeathCauseCounts(),
       dayPhase: 0.3,
       sunlight: sunlightFactor(0.3),
@@ -356,16 +360,14 @@ export class World {
     const temperature = ambientTemperatureC(season.seasonPhase, dayPhase)
     this.stats.temperature = temperature
 
-    tickWaterCycle(
-      this.atmosphere,
-      this.soil,
-      this.terrain,
-      temperature,
-      this.bounds.width,
-      this.bounds.height,
-    )
+    tickWaterCycle(this.atmosphere, this.soil, this.terrain, temperature)
 
-    this.atmosphere.vapor += this.soil.tickLateralDiffusion()
+    // Water clamped out of soil during lateral diffusion vents at the map center (no single
+    // source cell); vent() routes any overflow to surface/soil so nothing leaks.
+    this.atmosphere.vent(this.bounds.width / 2, this.bounds.height / 2, this.soil.tickLateralDiffusion())
+
+    // Surface water levels out toward hydrostatic equilibrium (floods valleys, flows downhill).
+    this.terrain.tickSurfaceFlow()
 
     this.primaryProductionThisTick += this.grass.tick(
       this.rng,
@@ -421,6 +423,7 @@ export class World {
       terrain: this.terrain.snapshot(this.atmosphere.isRaining),
       soil: this.soil.snapshot(this.atmosphere.isRaining),
       grass: this.grass.snapshot(),
+      air: this.atmosphere.snapshot(),
       pathogens: this.pathogens,
       stats: { ...this.stats },
     }
@@ -839,7 +842,7 @@ export class World {
         this.atmosphere.humidity,
         this.atmosphere.isRaining,
       )
-      this.atmosphere.vapor += sweat
+      this.atmosphere.vent(creature.x, creature.y, sweat)
     }
 
     for (const creature of this.creatures) {
@@ -1251,7 +1254,8 @@ export class World {
 
     this.stats.surfaceWater = this.terrain.totalWater()
     this.stats.hasSurfaceWater = this.terrain.hasStandingWater()
-    this.stats.airWater = this.atmosphere.vapor
+    this.stats.airWater = this.atmosphere.totalWater()
+    this.stats.airWaterCapacity = this.atmosphere.vaporCapacityTotal
     this.stats.soilWater = this.soil.totalWater()
     let creatureWater = 0
     for (const creature of this.creatures) creatureWater += creature.hydration
@@ -1269,6 +1273,7 @@ export class World {
     this.stats.avgSoilMoisture = this.soil.averageMoisture()
     this.stats.airHumidity = this.atmosphere.humidity
     this.stats.isRaining = this.atmosphere.isRaining
+    this.stats.wind = this.atmosphere.wind
 
     const energy = sumEntityEnergy(this.plants, this.creatures, this.corpses)
     this.stats.plantEnergy = energy.plants + this.grass.totalEnergy()

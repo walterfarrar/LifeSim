@@ -16,6 +16,8 @@ import { drawPlantBody } from '../sim/render/plantDraw'
 import { drawTerrainHeight, drawTerrainWater } from '../sim/render/terrainWaterDraw'
 import { drawSoilMoisture } from '../sim/render/soilDraw'
 import { drawGrassCover } from '../sim/render/grassDraw'
+import { drawAirHumidity } from '../sim/render/airDraw'
+import { drawElevationMap } from '../sim/render/elevationDraw'
 import { moistureGrowthFactor } from '../sim/soilMoisture'
 import { temperatureComfortFactor } from '../sim/temperature'
 import { isPlantDormant } from '../sim/plantClimate'
@@ -45,7 +47,9 @@ import { pickCreatureAt } from './creatureHitTest'
 import { pickPlantAt } from './plantHitTest'
 import { soilCellAt } from './soilHitTest'
 import { VisualLegend } from './VisualLegend'
+import { ElevationLegend } from './ElevationLegend'
 import { InspectModeBar } from './InspectModeBar'
+import { WindIndicator } from './WindIndicator'
 import type { InspectMode, MapSelection } from '../sim/mapSelection'
 
 type SimulationCanvasProps = {
@@ -55,9 +59,13 @@ type SimulationCanvasProps = {
   settings: SimSettings
   inspectMode: InspectMode
   selection: MapSelection | null
+  showClouds: boolean
+  showElevation: boolean
   onSnapshot: (snapshot: WorldSnapshot) => void
   onSelect: (selection: MapSelection | null) => void
   onInspectModeChange: (mode: InspectMode) => void
+  onToggleClouds: () => void
+  onToggleElevation: () => void
 }
 
 const DRAG_THRESHOLD_PX = 6
@@ -69,9 +77,13 @@ export function SimulationCanvas({
   settings,
   inspectMode,
   selection,
+  showClouds,
+  showElevation,
   onSnapshot,
   onSelect,
   onInspectModeChange,
+  onToggleClouds,
+  onToggleElevation,
 }: SimulationCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const displayCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -100,10 +112,16 @@ export function SimulationCanvas({
     dayLengthSeconds: 24,
     temperature: 20,
   })
+  const [windDisplay, setWindDisplay] = useState({ dir: 0, speed: 0 })
+
+  const showCloudsRef = useRef(showClouds)
+  const showElevationRef = useRef(showElevation)
 
   pausedRef.current = paused
   speedRef.current = speedMultiplier
   viewportRefState.current = viewport
+  showCloudsRef.current = showClouds
+  showElevationRef.current = showElevation
 
   const applyViewport = useCallback((next: ViewportTransform) => {
     viewportRefState.current = next
@@ -171,7 +189,15 @@ export function SimulationCanvas({
       }
 
       const snapshot = world.snapshot()
-      drawWorld(worldCtx, snapshot, selection, world.width, world.height)
+      drawWorld(
+        worldCtx,
+        snapshot,
+        selection,
+        world.width,
+        world.height,
+        showCloudsRef.current,
+        showElevationRef.current,
+      )
 
       const viewportSize = viewportSizeRef.current
       if (viewportSize.width > 0 && viewportSize.height > 0) {
@@ -195,7 +221,6 @@ export function SimulationCanvas({
           snapshot.stats.sunlight,
           snapshot.stats.season,
           snapshot.stats.dayPhase,
-          snapshot.stats.isRaining,
         )
       }
 
@@ -209,6 +234,7 @@ export function SimulationCanvas({
           dayLengthSeconds: snapshot.stats.effectiveDayLengthSeconds,
           temperature: snapshot.stats.temperature,
         })
+        setWindDisplay({ dir: snapshot.stats.wind.dir, speed: snapshot.stats.wind.speed })
         onSnapshot(snapshot)
       }
       frameId = requestAnimationFrame(render)
@@ -370,8 +396,19 @@ export function SimulationCanvas({
       >
         {seasonLabel(dayDisplay.season)} · {dayDisplay.label}
       </div>
-      <VisualLegend />
-      <InspectModeBar mode={inspectMode} onChange={onInspectModeChange} />
+      {showElevation ? <ElevationLegend /> : <VisualLegend />}
+      <WindIndicator
+        dir={windDisplay.dir}
+        speed={windDisplay.speed}
+        showClouds={showClouds}
+        onToggleClouds={onToggleClouds}
+      />
+      <InspectModeBar
+        mode={inspectMode}
+        onChange={onInspectModeChange}
+        showElevation={showElevation}
+        onToggleElevation={onToggleElevation}
+      />
       <div className="zoom-controls" aria-label="Map zoom">
         <button
           type="button"
@@ -554,14 +591,24 @@ function drawWorld(
   selection: MapSelection | null,
   worldWidth: number,
   worldHeight: number,
+  showClouds: boolean,
+  showElevation: boolean,
 ): void {
-  const { plants, corpses, creatures, terrain, soil, grass, stats } = snapshot
+  const { plants, corpses, creatures, terrain, soil, grass, air, stats } = snapshot
   const selectedCreatureId = selection?.type === 'creature' ? selection.id : null
   const selectedPlantId = selection?.type === 'plant' ? selection.id : null
   const selectedSoil = selection?.type === 'soil' ? selection : null
 
   ctx.fillStyle = VISUAL_THEME.canvasBackground
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+
+  if (showElevation) {
+    drawElevationMap(ctx, terrain, worldWidth, worldHeight)
+    if (selectedSoil) {
+      drawSoilSelection(ctx, soil, selectedSoil.col, selectedSoil.row, worldWidth, worldHeight)
+    }
+    return
+  }
 
   // Ground stack: soil (+ basin shading) → grass turf → surface water on top.
   drawSoilMoisture(ctx, soil, worldWidth, worldHeight)
@@ -605,5 +652,10 @@ function drawWorld(
     for (const { ox, oy } of toroidalDisplayOffsets(creature.x, creature.y, margin, worldWidth, worldHeight)) {
       drawCreatureAt(ctx, creature, selectedCreatureId, ox, oy, worldWidth, worldHeight)
     }
+  }
+
+  // Clouds sit above everything as the top atmospheric layer.
+  if (showClouds) {
+    drawAirHumidity(ctx, air, worldWidth, worldHeight)
   }
 }

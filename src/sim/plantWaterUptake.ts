@@ -34,17 +34,13 @@ export function clampGrowthReserveOverflow(
   energy: number,
   maxEnergy: number,
   atmosphere: AtmospherePool,
-  soil?: SoilAccess,
-  position?: { x: number; y: number },
+  soil: SoilAccess,
+  position: { x: number; y: number },
 ): number {
   const cap = plantGrowthReserveCapacity(energy, maxEnergy)
   if (water <= cap) return water
   const overflow = water - cap
-  if (soil && position) {
-    releaseTranspiredWater(atmosphere, soil, position.x, position.y, overflow)
-  } else {
-    atmosphere.vapor += overflow
-  }
+  releaseTranspiredWater(atmosphere, soil, position.x, position.y, overflow)
   return cap
 }
 
@@ -81,7 +77,7 @@ export function plantHydricWater(plant: { energy: number; water: number }): numb
 export function tickWoodyPlantWaterUptake(
   plant: Plant,
   soil: SoilAccess,
-  atmosphere: { vapor: number },
+  atmosphere: AtmospherePool,
   season: SeasonName,
   temperature: number,
 ): void {

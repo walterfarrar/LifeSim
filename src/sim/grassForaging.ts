@@ -14,6 +14,7 @@ import { toroidalDelta } from './toroidal'
 import type { HerbivoreTraits } from './genes'
 import type { Creature } from './types'
 import type { GrassCover } from './grassCover'
+import type { AtmospherePool } from './transpiration'
 
 export function isGrassGrazeCapped(
   index: number,
@@ -117,7 +118,7 @@ export function forageGrassBite(
   grass: GrassCover,
   index: number,
   amount: number,
-  atmosphere: { vapor: number },
+  atmosphere: AtmospherePool,
 ): number {
   if (amount <= 0 || !grass.isEdibleGrass(index)) return 0
 
@@ -138,7 +139,8 @@ export function forageGrassBite(
   const absorbed = creature.hydration - hydrationBefore
   // The grass gave up `totalWater`; whatever the creature couldn't absorb (efficiency loss
   // plus hydration overflow) vents to air instead of vanishing from the water budget.
-  atmosphere.vapor += Math.max(0, totalWater - absorbed)
+  const center = grass.cellCenter(index)
+  atmosphere.vent(center.x, center.y, Math.max(0, totalWater - absorbed))
 
   const gained = energyFromGrassBiomass(eaten, traits.forageEfficiency)
   creature.energy = capEnergy(creature, creature.energy + gained)
@@ -150,7 +152,7 @@ export function trySipGrassDew(
   creature: Creature,
   grass: GrassCover,
   index: number,
-  atmosphere: { vapor: number },
+  atmosphere: AtmospherePool,
 ): number {
   if (!grass.isLiveTurf(index) || grass.water[index] <= 0) return 0
 
@@ -175,7 +177,7 @@ export function trySipGrassDew(
   const usableWater = rawSip * GRASS_WATER_HYDRATION_EFFICIENCY
   const hydrationBefore = creature.hydration
   creature.hydration = capHydration(creature, creature.hydration + usableWater)
-  atmosphere.vapor += Math.max(0, rawSip - (creature.hydration - hydrationBefore))
+  atmosphere.vent(center.x, center.y, Math.max(0, rawSip - (creature.hydration - hydrationBefore)))
   return rawSip
 }
 

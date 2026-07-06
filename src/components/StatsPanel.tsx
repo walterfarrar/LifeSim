@@ -10,6 +10,7 @@ import type { AutoPathogenChampionRecord } from '../sim/pathogenAutoChampion'
 import type { SimSettings } from '../sim/simSettings'
 import { totalStartingHerbivores } from '../sim/simSettings'
 import { PLANT_KIND_LABEL, type PlantKind } from '../sim/plantKinds'
+import { AIR_CELL_SIZE_MULT, AIR_CELL_WATER_CAPACITY } from '../sim/config'
 
 const PLANT_KIND_ORDER: readonly PlantKind[] = ['grass', 'bush', 'tree']
 
@@ -156,10 +157,15 @@ export function StatsPanel({
         </div>
         <div>
           <dt>Air water</dt>
-          <dd title="Atmospheric vapor — rain starts at 90% humidity, stops at 20%, re-arms after drying to ~72%">
+          <dd title={`Moisture across the moving air-tile grid (${AIR_CELL_WATER_CAPACITY} units per tile, ${AIR_CELL_SIZE_MULT}× land tile size). Humidity is the map average; each tile rains locally when it reaches 90%, stopping at 5%. Clouds drift with the wind and wrap at the edges.`}>
             {formatWaterUnits(stats.airWater)}
-            <span className="water-sub-label"> · {(stats.airHumidity * 100).toFixed(0)}% humidity</span>
-            {stats.isRaining && <span className="rain-label"> · raining</span>}
+            <span className="water-sub-label">
+              {' '}
+              · {(stats.airHumidity * 100).toFixed(0)}% avg humidity
+              {stats.airWaterCapacity > 0 && (
+                <> · cap {formatWaterUnits(stats.airWaterCapacity)}</>
+              )}
+            </span>
           </dd>
         </div>
         <div>
