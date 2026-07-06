@@ -16,16 +16,23 @@ export function crownInHall<T extends ChampionHallEntry>(
   maxEntries: number = CHAMPION_HALL_MAX,
 ): { hall: T[]; crowned: boolean } {
   const reigning = hall[0] ?? null
+  const existing = hall.find((entry) => entry.entryId === candidate.entryId) ?? null
+
+  // Keep the best-ever record for a given entryId. If this lineage/strain has been
+  // crowned before with a higher score, don't downgrade it to the current (weaker) snapshot.
+  const kept = existing && existing.fitnessScore >= candidate.fitnessScore ? existing : candidate
+  const improved = kept === candidate && (!existing || candidate.fitnessScore > existing.fitnessScore)
+
   const withoutDuplicate = hall.filter((entry) => entry.entryId !== candidate.entryId)
-  const sorted = [...withoutDuplicate, candidate].sort((a, b) => b.fitnessScore - a.fitnessScore)
+  const sorted = [...withoutDuplicate, kept].sort((a, b) => b.fitnessScore - a.fitnessScore)
   const next = sorted.slice(0, maxEntries)
-  const madeHall = next.some((entry) => entry.entryId === candidate.entryId)
+  const madeHall = next.some((entry) => entry.entryId === kept.entryId)
 
   if (!madeHall) {
     return { hall: [...hall], crowned: false }
   }
 
-  const beatReigning = !reigning || candidate.fitnessScore > reigning.fitnessScore
+  const beatReigning = improved && (!reigning || kept.fitnessScore > reigning.fitnessScore)
   return { hall: next, crowned: beatReigning }
 }
 

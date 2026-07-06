@@ -110,6 +110,12 @@ function App() {
 
   useEffect(() => {
     setSelection(null)
+    // A new run restarts the world tick at 0; the trackers accumulate per-run stats
+    // (firstSeenTick, cumulative scores, observation counts), so they must be cleared
+    // or stale prior-run lineages produce negative spans and polluted fitness.
+    lineageTrackerRef.current.reset()
+    plantSpeciesTrackerRef.current.reset()
+    pathogenStrainTrackerRef.current.reset()
     setAutoChampion(loadAutoChampionRecord())
     setAutoPlantChampion(loadAutoPlantChampionRecord())
     setAutoPathogenChampion(loadAutoPathogenChampionRecord())
