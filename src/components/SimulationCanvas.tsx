@@ -389,44 +389,54 @@ export function SimulationCanvas({
         ['--map-aspect' as string]: String(settings.worldWidth / settings.worldHeight),
       }}
     >
-      {paused && <div className="paused-badge">Paused</div>}
-      <div
-        className={`time-badge${dayDisplay.isNight ? ' night' : ''}`}
-        title={`${seasonLabel(dayDisplay.season)} · ${formatTemperatureC(dayDisplay.temperature)} · day length ${formatDayLengthSeconds(dayDisplay.dayLengthSeconds)} · sunlight ${Math.round(dayDisplay.sunlight * 100)}%`}
-      >
-        {seasonLabel(dayDisplay.season)} · {dayDisplay.label}
+      <div className="map-hud map-hud-top">
+        <div className="map-hud-row">
+          <div className="map-hud-start">
+            {paused && <div className="paused-badge">Paused</div>}
+            <div
+              className={`time-badge${dayDisplay.isNight ? ' night' : ''}`}
+              title={`${seasonLabel(dayDisplay.season)} · ${formatTemperatureC(dayDisplay.temperature)} · day length ${formatDayLengthSeconds(dayDisplay.dayLengthSeconds)} · sunlight ${Math.round(dayDisplay.sunlight * 100)}%`}
+            >
+              {seasonLabel(dayDisplay.season)} · {dayDisplay.label}
+            </div>
+          </div>
+          <div className="map-hud-end">
+            <WindIndicator
+              dir={windDisplay.dir}
+              speed={windDisplay.speed}
+              showClouds={showClouds}
+              onToggleClouds={onToggleClouds}
+            />
+            <div className="zoom-controls" aria-label="Map zoom">
+              <button
+                type="button"
+                onClick={() => zoomFromCenter(1 / VIEWPORT_ZOOM_STEP)}
+                disabled={!canZoomOut}
+                title="Zoom out (limited to full map)"
+              >
+                −
+              </button>
+              <span className="zoom-value" title="100% = entire map visible">
+                {Math.round(viewport.zoom * 100)}%
+              </span>
+              <button type="button" onClick={() => zoomFromCenter(VIEWPORT_ZOOM_STEP)} title="Zoom in">
+                +
+              </button>
+              <button type="button" onClick={() => applyViewport(DEFAULT_VIEWPORT)} title="Reset zoom and pan">
+                Fit
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-      {showElevation ? <ElevationLegend /> : <VisualLegend />}
-      <WindIndicator
-        dir={windDisplay.dir}
-        speed={windDisplay.speed}
-        showClouds={showClouds}
-        onToggleClouds={onToggleClouds}
-      />
-      <InspectModeBar
-        mode={inspectMode}
-        onChange={onInspectModeChange}
-        showElevation={showElevation}
-        onToggleElevation={onToggleElevation}
-      />
-      <div className="zoom-controls" aria-label="Map zoom">
-        <button
-          type="button"
-          onClick={() => zoomFromCenter(1 / VIEWPORT_ZOOM_STEP)}
-          disabled={!canZoomOut}
-          title="Zoom out (limited to full map)"
-        >
-          −
-        </button>
-        <span className="zoom-value" title="100% = entire map visible">
-          {Math.round(viewport.zoom * 100)}%
-        </span>
-        <button type="button" onClick={() => zoomFromCenter(VIEWPORT_ZOOM_STEP)} title="Zoom in">
-          +
-        </button>
-        <button type="button" onClick={() => applyViewport(DEFAULT_VIEWPORT)} title="Reset zoom and pan">
-          Fit
-        </button>
+      <div className="map-hud map-hud-bottom">
+        <InspectModeBar
+          mode={inspectMode}
+          onChange={onInspectModeChange}
+          showElevation={showElevation}
+          onToggleElevation={onToggleElevation}
+        />
+        {showElevation ? <ElevationLegend /> : <VisualLegend />}
       </div>
       <div
         ref={viewportRef}
