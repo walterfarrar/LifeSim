@@ -141,7 +141,7 @@ export const SURFACE_BALANCE_PASSES = 6
 export const SURFACE_FLOW_RELAX = 0.25
 /** Stop transferring when neighbor water surfaces are within this distance. */
 export const SURFACE_LEVEL_TOLERANCE = 0.05
-export const SURFACE_INFILTRATION_RATE = 0.011
+export const SURFACE_INFILTRATION_RATE = 0.014
 /** Slower soak into soil while it is raining (surface fills first). */
 export const SURFACE_INFILTRATION_RAIN_MULT = 0.55
 /** Each bucket gains this much per rain round when the budget allows (same for every tile). */
@@ -298,7 +298,7 @@ export const POND_SEEP_RATE = 0.22
 export const POND_SEEP_REACH = 480
 /** Lateral moisture spread between neighboring soil cells per tick. */
 /** Fraction of neighbor moisture gap closed per tick (lower = wet spots linger longer). */
-export const SOIL_LATERAL_DIFFUSION = 0.01
+export const SOIL_LATERAL_DIFFUSION = 0.013
 
 /** Energy drained per tick when a creature is submerged in the pond. */
 export const DROWN_CREATURE_DAMAGE = 3.4
