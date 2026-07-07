@@ -53,7 +53,7 @@ export function createFounderVariantDNA(rng: Rng, founder: DNA, founderSettings:
   return next
 }
 
-function createFounderGroupDNA(
+export function createFounderGroupDNA(
   rng: Rng,
   groupIndex: number,
   groupCount: number,
@@ -72,6 +72,45 @@ export type GroupSpawn = {
   position: Vec2
 }
 
+export function createGroupMemberSpawn(
+  rng: Rng,
+  groupIndex: number,
+  totalGroups: number,
+  memberIndex: number,
+  founderSettings: FounderSettings,
+  groupFounderDna?: (DNA | null)[],
+  sexIndexOffset = 0,
+  groupFounder?: DNA,
+): GroupSpawn {
+  const cols = Math.ceil(Math.sqrt(totalGroups))
+  const rows = Math.ceil(totalGroups / cols)
+
+  const bounds = getWorldBounds()
+  const groupSpread = Math.min(75, Math.max(40, Math.min(bounds.width, bounds.height) * 0.04))
+
+  const savedFounder = groupFounderDna?.[groupIndex]
+  const founder =
+    groupFounder ?? (savedFounder ? cloneDNA(savedFounder) : createFounderGroupDNA(rng, groupIndex, totalGroups))
+  const row = Math.floor(groupIndex / cols)
+  const col = groupIndex % cols
+  const centerX = (bounds.width / (cols + 1)) * (col + 1)
+  const centerY = (bounds.height / (rows + 1)) * (row + 1)
+
+  const dna =
+    memberIndex === 0 ? cloneDNA(founder) : createFounderVariantDNA(rng, founder, founderSettings)
+  const sexIndex = sexIndexOffset + memberIndex
+  dna[HerbivoreGene.SexExpression] =
+    sexIndex % 2 === 0 ? rng.int(20, 120) : rng.int(135, 235)
+
+  return {
+    dna,
+    position: {
+      x: centerX + rng.range(-groupSpread, groupSpread),
+      y: centerY + rng.range(-groupSpread, groupSpread),
+    },
+  }
+}
+
 export function createSingleGroupPopulation(
   rng: Rng,
   groupIndex: number,
@@ -81,33 +120,22 @@ export function createSingleGroupPopulation(
   groupFounderDna?: (DNA | null)[],
   sexIndexOffset = 0,
 ): GroupSpawn[] {
-  const spawns: GroupSpawn[] = []
-  const cols = Math.ceil(Math.sqrt(totalGroups))
-  const rows = Math.ceil(totalGroups / cols)
-
-  const bounds = getWorldBounds()
-  const groupSpread = Math.min(75, Math.max(40, Math.min(bounds.width, bounds.height) * 0.04))
-
   const savedFounder = groupFounderDna?.[groupIndex]
   const founder = savedFounder ? cloneDNA(savedFounder) : createFounderGroupDNA(rng, groupIndex, totalGroups)
-  const row = Math.floor(groupIndex / cols)
-  const col = groupIndex % cols
-  const centerX = (bounds.width / (cols + 1)) * (col + 1)
-  const centerY = (bounds.height / (rows + 1)) * (row + 1)
-
+  const spawns: GroupSpawn[] = []
   for (let i = 0; i < herbivoresPerGroup; i++) {
-    const dna = i === 0 ? cloneDNA(founder) : createFounderVariantDNA(rng, founder, founderSettings)
-    const sexIndex = sexIndexOffset + i
-    dna[HerbivoreGene.SexExpression] =
-      sexIndex % 2 === 0 ? rng.int(20, 120) : rng.int(135, 235)
-
-    spawns.push({
-      dna,
-      position: {
-        x: centerX + rng.range(-groupSpread, groupSpread),
-        y: centerY + rng.range(-groupSpread, groupSpread),
-      },
-    })
+    spawns.push(
+      createGroupMemberSpawn(
+        rng,
+        groupIndex,
+        totalGroups,
+        i,
+        founderSettings,
+        groupFounderDna,
+        sexIndexOffset,
+        founder,
+      ),
+    )
   }
 
   return spawns

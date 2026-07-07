@@ -5,12 +5,14 @@ import {
   SOIL_LATERAL_DIFFUSION,
   SOIL_MOISTURE_HALF_SAT,
 } from './config'
-import { getWorldBounds } from './worldBounds'
+import { computeSoilGridLayout, soilCellAtWorld } from './soilGridLayout'
 
 export type SoilMoistureSnapshot = {
   cols: number
   rows: number
   cellSize: number
+  cellW: number
+  cellH: number
   values: Float32Array
   isRaining: boolean
 }
@@ -42,14 +44,22 @@ export class SoilMoisture implements SoilAccess {
   readonly cols: number
   readonly rows: number
   readonly cellSize: number
+  readonly cellW: number
+  readonly cellH: number
+  readonly gridWidth: number
+  readonly gridHeight: number
   /** Water units per cell (0 … SOIL_CELL_WATER_CAPACITY). */
   readonly values: Float32Array
 
   constructor(cellSize = SOIL_CELL_SIZE) {
-    const bounds = getWorldBounds()
-    this.cellSize = cellSize
-    this.cols = Math.max(1, Math.ceil(bounds.width / cellSize))
-    this.rows = Math.max(1, Math.ceil(bounds.height / cellSize))
+    const grid = computeSoilGridLayout(cellSize)
+    this.cellSize = grid.cellSize
+    this.cols = grid.cols
+    this.rows = grid.rows
+    this.cellW = grid.cellW
+    this.cellH = grid.cellH
+    this.gridWidth = grid.gridWidth
+    this.gridHeight = grid.gridHeight
     this.values = new Float32Array(this.cols * this.rows)
   }
 
@@ -76,6 +86,8 @@ export class SoilMoisture implements SoilAccess {
       cols: this.cols,
       rows: this.rows,
       cellSize: this.cellSize,
+      cellW: this.cellW,
+      cellH: this.cellH,
       values: this.values,
       isRaining,
     }
@@ -86,9 +98,7 @@ export class SoilMoisture implements SoilAccess {
   }
 
   cellIndex(x: number, y: number): number {
-    const cx = this.wrap(Math.floor(x / this.cellSize), this.cols)
-    const cy = this.wrap(Math.floor(y / this.cellSize), this.rows)
-    return cy * this.cols + cx
+    return soilCellAtWorld(x, y, this.cellW, this.cellH, this.cols, this.rows).index
   }
 
   /** Moisture fraction 0–1 at a world position. */
@@ -147,8 +157,8 @@ export class SoilMoisture implements SoilAccess {
       if (want <= 0) continue
       const cx = i % this.cols
       const cy = Math.floor(i / this.cols)
-      const x = (cx + 0.5) * this.cellSize
-      const y = (cy + 0.5) * this.cellSize
+      const x = (cx + 0.5) * this.cellW
+      const y = (cy + 0.5) * this.cellH
       const accepted = accept(x, y, want)
       this.values[i] -= accepted
       total += accepted

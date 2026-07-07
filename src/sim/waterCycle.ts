@@ -170,18 +170,18 @@ export class Atmosphere {
     const arow = Math.floor(index / this.cols)
     const baseX = wrapFloat(acol * this.cellW + this.offsetX, this.gridWidth)
     const baseY = wrapFloat(arow * this.cellH + this.offsetY, this.gridHeight)
-    const spanC = Math.ceil(this.cellW / soil.cellSize) + 1
-    const spanR = Math.ceil(this.cellH / soil.cellSize) + 1
-    const soilColStart = Math.floor(baseX / soil.cellSize)
-    const soilRowStart = Math.floor(baseY / soil.cellSize)
+    const spanC = Math.ceil(this.cellW / soil.cellW) + 1
+    const spanR = Math.ceil(this.cellH / soil.cellH) + 1
+    const soilColStart = Math.floor(baseX / soil.cellW)
+    const soilRowStart = Math.floor(baseY / soil.cellH)
     const out: { x: number; y: number }[] = []
 
     for (let dr = 0; dr < spanR; dr++) {
       for (let dc = 0; dc < spanC; dc++) {
         const cx = wrapIndex(soilColStart + dc, soil.cols)
         const cy = wrapIndex(soilRowStart + dr, soil.rows)
-        const x = (cx + 0.5) * soil.cellSize
-        const y = (cy + 0.5) * soil.cellSize
+        const x = (cx + 0.5) * soil.cellW
+        const y = (cy + 0.5) * soil.cellH
         if (this.cellIndexAtWorld(x, y) === index) out.push({ x, y })
       }
     }

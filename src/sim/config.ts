@@ -15,10 +15,14 @@ export const TICKS_PER_SECOND = 30
 
 export const INITIAL_PLANTS = 650
 export const INITIAL_HERBIVORES = 40
-/** Sim-years before the first herbivore group appears at world start. */
-export const CREATURE_FIRST_SPAWN_DELAY_YEARS = 50
-/** Sim-years between each founder group introduction (and between post-cycle extinction checks). */
+/** Sim-years before the first founder group appears at world start. */
+export const CREATURE_FIRST_SPAWN_DELAY_YEARS = 10
+/** Sim-years between each founder group introduction (and post-cycle extinction checks). */
 export const CREATURE_GROUP_SPAWN_INTERVAL_YEARS = 50
+export const MIN_CREATURE_FIRST_SPAWN_DELAY_YEARS = 0
+export const MAX_CREATURE_FIRST_SPAWN_DELAY_YEARS = 200
+export const MIN_CREATURE_GROUP_SPAWN_INTERVAL_YEARS = 1
+export const MAX_CREATURE_GROUP_SPAWN_INTERVAL_YEARS = 200
 export const MAX_PLANTS = 1600
 export const MAX_GRASS_PLANTS = 1200
 export const MAX_BUSH_PLANTS = 200
@@ -119,7 +123,7 @@ export const SOIL_MOISTURE_HALF_SAT = 0.14
 export const SOIL_REPRO_MIN_MOISTURE = 0.06
 
 /** Closed water cycle — total world water budget and initial pool split. */
-export const DEFAULT_TOTAL_WATER = 32_000
+export const DEFAULT_TOTAL_WATER = 20_000
 export const MIN_TOTAL_WATER = 2_000
 export const MAX_TOTAL_WATER = 250_000
 /** Fraction of total water placed in the pond at reset (shore wetting moves some to soil). */

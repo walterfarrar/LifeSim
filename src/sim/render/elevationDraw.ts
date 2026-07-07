@@ -52,10 +52,10 @@ function colorAtNormalized(t: number): { r: number; g: number; b: number } {
 export function drawElevationMap(
   ctx: CanvasRenderingContext2D,
   terrain: TerrainWaterSnapshot,
-  worldWidth: number,
-  worldHeight: number,
+  _worldWidth: number,
+  _worldHeight: number,
 ): void {
-  const { cols, rows, cellSize, height } = terrain
+  const { cols, rows, cellW, cellH, height } = terrain
 
   for (let cy = 0; cy < rows; cy++) {
     for (let cx = 0; cx < cols; cx++) {
@@ -64,10 +64,10 @@ export function drawElevationMap(
       const norm = (ground - TERRAIN_ELEVATION_MIN) / ELEVATION_SPAN
       const { r, g, b } = colorAtNormalized(norm)
 
-      const x = cx * cellSize
-      const y = cy * cellSize
-      const w = Math.min(cellSize, worldWidth - x)
-      const h = Math.min(cellSize, worldHeight - y)
+      const x = cx * cellW
+      const y = cy * cellH
+      const w = cellW
+      const h = cellH
       if (w <= 0 || h <= 0) continue
 
       ctx.fillStyle = `rgb(${r}, ${g}, ${b})`

@@ -64,9 +64,9 @@ export function findBestGrassTarget(
   skipCells?: ReadonlySet<number>,
   grazeCounts?: ReadonlyMap<number, number>,
 ): number | null {
-  const cx = Math.floor(creature.x / grass.cellSize)
-  const cy = Math.floor(creature.y / grass.cellSize)
-  const cellReach = Math.ceil(seekRange / grass.cellSize) + 1
+  const cx = Math.floor(creature.x / grass.cellW)
+  const cy = Math.floor(creature.y / grass.cellH)
+  const cellReach = Math.ceil(seekRange / Math.min(grass.cellW, grass.cellH)) + 1
 
   let bestIdx: number | null = null
   let bestScore = -1
@@ -188,9 +188,9 @@ export function findBestGrassWaterTarget(
 ): number | null {
   let bestIdx: number | null = null
   let bestScore = -1
-  const cx = Math.floor(creature.x / grass.cellSize)
-  const cy = Math.floor(creature.y / grass.cellSize)
-  const cellReach = Math.ceil(seekRange / grass.cellSize) + 1
+  const cx = Math.floor(creature.x / grass.cellW)
+  const cy = Math.floor(creature.y / grass.cellH)
+  const cellReach = Math.ceil(seekRange / Math.min(grass.cellW, grass.cellH)) + 1
 
   for (let dr = -cellReach; dr <= cellReach; dr++) {
     for (let dc = -cellReach; dc <= cellReach; dc++) {

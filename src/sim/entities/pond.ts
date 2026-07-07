@@ -1,4 +1,3 @@
-import { markPendingDeathCause } from '../deathCause'
 import { DROWN_CREATURE_DAMAGE, DROWN_PLANT_DAMAGE } from '../config'
 import type { Creature, Vec2 } from '../types'
 import type { TerrainWater } from '../terrainWater'
@@ -12,7 +11,9 @@ export function applyCreatureDrowning(creature: Creature, terrain: TerrainWater)
   const traits = creatureTraits(creature)
   if (!terrain.isSubmerged(creature.x, creature.y, traits.radius)) return
   creature.energy -= DROWN_CREATURE_DAMAGE
-  markPendingDeathCause(creature, 'drowning')
+  if (creature.energy <= 0) {
+    creature.pendingDeathCause = 'drowning'
+  }
 }
 
 export function applyPlantDrowning(

@@ -4,6 +4,10 @@ import {
   MAX_WORLD_WIDTH,
   MIN_WORLD_HEIGHT,
   MIN_WORLD_WIDTH,
+  MAX_CREATURE_FIRST_SPAWN_DELAY_YEARS,
+  MAX_CREATURE_GROUP_SPAWN_INTERVAL_YEARS,
+  MIN_CREATURE_FIRST_SPAWN_DELAY_YEARS,
+  MIN_CREATURE_GROUP_SPAWN_INTERVAL_YEARS,
   POND_MAX_BASE_RADIUS,
   POND_MIN_BASE_RADIUS,
 } from '../sim/config'
@@ -16,11 +20,10 @@ import type { AutoPathogenChampionRecord } from '../sim/pathogenAutoChampion'
 import { getFounderGenomeById, listFounderGenomeChoices } from '../sim/founderGenomes'
 import type { SavedGenome } from '../sim/dnaExport'
 import type { SimSettings } from '../sim/simSettings'
-import { settingsRunKey, totalStartingHerbivores } from '../sim/simSettings'
+import { cloneSettings, DEFAULT_SIM_SETTINGS, settingsRunKey, totalStartingHerbivores } from '../sim/simSettings'
 import { formatYears } from '../sim/timeScale'
 
-type SettingsModalProps = {
-  open: boolean
+type SettingsPanelProps = {
   draft: SimSettings
   active: SimSettings
   seed: number
@@ -132,8 +135,7 @@ function founderHint(
   return `${selected.sex} · saved from creature #${selected.sourceCreatureId}`
 }
 
-export function SettingsModal({
-  open,
+export function SettingsPanel({
   draft,
   active,
   seed,
@@ -143,16 +145,12 @@ export function SettingsModal({
   onChange,
   onStart,
   onClose,
-}: SettingsModalProps) {
+}: SettingsPanelProps) {
   const [library, setLibrary] = useState<SavedGenome[]>([])
 
   useEffect(() => {
-    if (open) {
-      setLibrary(listFounderGenomeChoices())
-    }
-  }, [open, autoChampion?.fitnessScore])
-
-  if (!open) return null
+    setLibrary(listFounderGenomeChoices())
+  }, [autoChampion?.fitnessScore])
 
   const pendingChanges = settingsRunKey(draft) !== settingsRunKey(active)
   const totalHerbivores = totalStartingHerbivores(draft)
@@ -161,31 +159,24 @@ export function SettingsModal({
     .filter((id) => id.length > 0)
 
   return (
-    <div className="settings-modal-backdrop" onClick={onClose} role="presentation">
-      <div
-        className="settings-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="settings-modal-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="settings-modal-header">
-          <div>
-            <h2 id="settings-modal-title">Simulation settings</h2>
-            <p className="settings-subtitle">
-              {draft.worldWidth}×{draft.worldHeight} map · {draft.creatureGroups} group
-              {draft.creatureGroups === 1 ? '' : 's'} · {totalHerbivores} creatures ·{' '}
-              {draft.initialPlants} plants
-              {selectedChampions.length > 0 &&
-                ` · ${selectedChampions.length} saved champion${selectedChampions.length === 1 ? '' : 's'}`}
-            </p>
-          </div>
-          <button type="button" className="settings-modal-close" onClick={onClose} aria-label="Close">
-            ×
-          </button>
-        </header>
+    <section className="settings-panel sidebar-panel" aria-label="Simulation settings">
+      <header className="settings-panel-header">
+        <div>
+          <h2 id="settings-panel-title">Simulation settings</h2>
+          <p className="settings-subtitle">
+            {draft.worldWidth}×{draft.worldHeight} map · {draft.creatureGroups} group
+            {draft.creatureGroups === 1 ? '' : 's'} · {totalHerbivores} creatures ·{' '}
+            {draft.initialPlants} plants
+            {selectedChampions.length > 0 &&
+              ` · ${selectedChampions.length} saved champion${selectedChampions.length === 1 ? '' : 's'}`}
+          </p>
+        </div>
+        <button type="button" className="settings-panel-close" onClick={onClose} aria-label="Back to stats">
+          ×
+        </button>
+      </header>
 
-        <div className="settings-modal-body">
+      <div className="settings-panel-body">
           <details open className="settings-group">
             <summary>Map</summary>
             <div className="settings-fields">
@@ -228,6 +219,28 @@ export function SettingsModal({
                 min={0}
                 max={80}
                 onChange={(herbivoresPerGroup) => onChange(patch(draft, { herbivoresPerGroup }))}
+              />
+              <NumberField
+                label="First group delay"
+                hint="Sim-years before the first founder group appears (all creatures in that group spawn together)"
+                value={draft.creatureFirstSpawnDelayYears}
+                min={MIN_CREATURE_FIRST_SPAWN_DELAY_YEARS}
+                max={MAX_CREATURE_FIRST_SPAWN_DELAY_YEARS}
+                step={1}
+                onChange={(creatureFirstSpawnDelayYears) =>
+                  onChange(patch(draft, { creatureFirstSpawnDelayYears }))
+                }
+              />
+              <NumberField
+                label="Group spawn interval"
+                hint="Sim-years between each founder group (every creature in a group appears at once)"
+                value={draft.creatureGroupSpawnIntervalYears}
+                min={MIN_CREATURE_GROUP_SPAWN_INTERVAL_YEARS}
+                max={MAX_CREATURE_GROUP_SPAWN_INTERVAL_YEARS}
+                step={1}
+                onChange={(creatureGroupSpawnIntervalYears) =>
+                  onChange(patch(draft, { creatureGroupSpawnIntervalYears }))
+                }
               />
             </div>
           </details>
@@ -431,24 +444,27 @@ export function SettingsModal({
           </details>
         </div>
 
-        <footer className="settings-modal-footer">
-          <p className="settings-seed">Active seed: {seed}</p>
-          {pendingChanges && (
-            <p className="settings-pending">Unsaved changes — restart to apply to the simulation.</p>
-          )}
-          <div className="settings-actions">
-            <button type="button" onClick={onClose}>
-              Close
-            </button>
-            <button type="button" className="settings-primary" onClick={() => onStart(false)}>
-              {pendingChanges ? 'Apply & restart' : 'Restart'}
-            </button>
-            <button type="button" onClick={() => onStart(true)}>
-              New seed
-            </button>
-          </div>
-        </footer>
-      </div>
-    </div>
+      <footer className="settings-panel-footer">
+        <p className="settings-seed">Active seed: {seed}</p>
+        {pendingChanges && (
+          <p className="settings-pending">Unsaved changes — restart to apply to the simulation.</p>
+        )}
+        <div className="settings-actions">
+          <button type="button" className="settings-primary" onClick={() => onStart(false)}>
+            {pendingChanges ? 'Apply & restart' : 'Restart'}
+          </button>
+          <button type="button" onClick={() => onStart(true)}>
+            New seed
+          </button>
+        </div>
+        <button
+          type="button"
+          className="settings-reset-defaults"
+          onClick={() => onChange(cloneSettings(DEFAULT_SIM_SETTINGS))}
+        >
+          Reset to defaults
+        </button>
+      </footer>
+    </section>
   )
 }

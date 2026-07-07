@@ -6,7 +6,7 @@ import { StatsPanel } from './components/StatsPanel'
 import { CreatureInspector } from './components/CreatureInspector'
 import { PlantInspector } from './components/PlantInspector'
 import { SoilInspector } from './components/SoilInspector'
-import { SettingsModal } from './components/SettingsModal'
+import { SettingsPanel } from './components/SettingsModal'
 import {
   AUTO_CHAMPION_CHECK_INTERVAL,
   loadAutoChampionRecord,
@@ -38,6 +38,8 @@ import {
 } from './sim/simSettings'
 import type { WorldSnapshot } from './sim/types'
 import { AirInspector } from './components/AirInspector'
+import { ElevationLegendPanel, useElevationLegendOpen } from './components/ElevationLegend'
+import { useVisualLegendOpen, VisualLegendPanel } from './components/VisualLegend'
 import type { InspectMode, MapSelection } from './sim/mapSelection'
 import { selectionMatchesMode } from './sim/mapSelection'
 import { plantKindFromDna } from './sim/plantKinds'
@@ -63,6 +65,8 @@ function App() {
   const [selection, setSelection] = useState<MapSelection | null>(null)
   const [showClouds, setShowClouds] = useState(true)
   const [showElevation, setShowElevation] = useState(false)
+  const [legendOpen, setLegendOpen] = useVisualLegendOpen()
+  const [elevationLegendOpen, setElevationLegendOpen] = useElevationLegendOpen()
   const [autoChampion, setAutoChampion] = useState<AutoChampionRecord | null>(() => loadAutoChampionRecord())
   const [autoPlantChampion, setAutoPlantChampion] = useState<AutoPlantChampionRecord | null>(() =>
     loadAutoPlantChampionRecord(),
@@ -185,6 +189,14 @@ function App() {
         setSelection(null)
         return
       }
+      if (event.code === 'Escape' && legendOpen) {
+        setLegendOpen(false)
+        return
+      }
+      if (event.code === 'Escape' && elevationLegendOpen) {
+        setElevationLegendOpen(false)
+        return
+      }
       if (event.code === 'Escape' && editorOpen) {
         setEditorOpen(false)
         return
@@ -206,7 +218,7 @@ function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [settingsOpen, hallOpen, editorOpen, selection])
+  }, [settingsOpen, hallOpen, editorOpen, selection, legendOpen, elevationLegendOpen])
 
   const selectedCreature =
     selection?.type === 'creature'
@@ -275,34 +287,117 @@ function App() {
 
   const pendingSettingsChanges = settingsRunKey(draftSettings) !== settingsRunKey(activeSettings)
 
-  return (
-    <div className="app">
-      <aside className="sidebar">
-        <StatsPanel
-          stats={stats}
-          maxTickReached={maxTickReached}
-          paused={paused}
-          settings={activeSettings}
+  const sidebarContent = (() => {
+    if (selectedCreature) {
+      return (
+        <CreatureInspector
+          creature={selectedCreature}
+          onClose={() => setSelection(null)}
+          onEditInDesigner={(creature) => {
+            setEditorGenome(creatureToSavedGenome(creature))
+            setEditorOpen(true)
+          }}
+        />
+      )
+    }
+    if (selectedPlant && snapshot) {
+      return (
+        <PlantInspector
+          plant={selectedPlant}
+          soilMoisture={selectedPlantSoilMoisture}
+          temperature={snapshot.stats.temperature}
+          season={snapshot.stats.season}
+          onClose={() => setSelection(null)}
+        />
+      )
+    }
+    if (selection?.type === 'soil' && snapshot) {
+      return (
+        <SoilInspector
+          col={selection.col}
+          row={selection.row}
+          soil={snapshot.soil}
+          terrain={snapshot.terrain}
+          grass={snapshot.grass}
+          woodyPlantCount={selectedSoilWoodyPlantCount}
+          onClose={() => setSelection(null)}
+        />
+      )
+    }
+    if (selection?.type === 'air' && snapshot) {
+      return (
+        <AirInspector
+          col={selection.col}
+          row={selection.row}
+          air={snapshot.air}
+          soil={snapshot.soil}
+          terrain={snapshot.terrain}
+          stats={snapshot.stats}
+          worldWidth={activeSettings.worldWidth}
+          worldHeight={activeSettings.worldHeight}
+          onClose={() => setSelection(null)}
+        />
+      )
+    }
+    if (showElevation && elevationLegendOpen) {
+      return <ElevationLegendPanel onClose={() => setElevationLegendOpen(false)} />
+    }
+    if (legendOpen && !showElevation) {
+      return <VisualLegendPanel onClose={() => setLegendOpen(false)} />
+    }
+    if (settingsOpen) {
+      return (
+        <SettingsPanel
+          draft={draftSettings}
+          active={activeSettings}
           seed={seed}
           autoChampion={autoChampion}
           autoPlantChampion={autoPlantChampion}
           autoPathogenChampion={autoPathogenChampion}
-          hasChampionHall={hasChampionHall}
-          pendingSettingsChanges={pendingSettingsChanges}
-          speedMultiplier={speedMultiplier}
-          onTogglePause={() => setPaused((value) => !value)}
-          onSlower={() => setSpeedMultiplier((value) => clampSpeedMultiplier(value / 2))}
-          onFaster={() => setSpeedMultiplier((value) => clampSpeedMultiplier(value * 2))}
-          onRestart={() => handleStart(false)}
-          onReseed={() => handleStart(true)}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onOpenHall={() => setHallOpen(true)}
-          onOpenEditor={() => {
-            setEditorGenome(null)
-            setEditorOpen(true)
-          }}
+          onChange={setDraftSettings}
+          onStart={handleStart}
+          onClose={() => setSettingsOpen(false)}
         />
-      </aside>
+      )
+    }
+    return (
+      <StatsPanel
+        stats={stats}
+        maxTickReached={maxTickReached}
+        paused={paused}
+        settings={activeSettings}
+        seed={seed}
+        autoChampion={autoChampion}
+        autoPlantChampion={autoPlantChampion}
+        autoPathogenChampion={autoPathogenChampion}
+        hasChampionHall={hasChampionHall}
+        pendingSettingsChanges={pendingSettingsChanges}
+        speedMultiplier={speedMultiplier}
+        showElevation={showElevation}
+        onTogglePause={() => setPaused((value) => !value)}
+        onSlower={() => setSpeedMultiplier((value) => clampSpeedMultiplier(value / 2))}
+        onFaster={() => setSpeedMultiplier((value) => clampSpeedMultiplier(value * 2))}
+        onRestart={() => handleStart(false)}
+        onReseed={() => handleStart(true)}
+        onOpenSettings={() => {
+          setLegendOpen(false)
+          setElevationLegendOpen(false)
+          setSettingsOpen(true)
+        }}
+        onOpenHall={() => setHallOpen(true)}
+        onOpenEditor={() => {
+          setEditorGenome(null)
+          setEditorOpen(true)
+        }}
+        onOpenLegend={() => setLegendOpen(true)}
+        onOpenElevationScale={() => setElevationLegendOpen(true)}
+      />
+    )
+  })()
+
+  return (
+    <div className="app">
+      <aside className="sidebar">{sidebarContent}</aside>
       <div className="map-stage">
         <SimulationCanvas
           key={canvasKey}
@@ -315,72 +410,34 @@ function App() {
           showClouds={showClouds}
           showElevation={showElevation}
           onSnapshot={onSnapshot}
-          onSelect={setSelection}
+          onSelect={(next) => {
+            setSelection(next)
+            if (next) {
+              setLegendOpen(false)
+              setElevationLegendOpen(false)
+              setSettingsOpen(false)
+            }
+          }}
           onInspectModeChange={handleInspectModeChange}
           onToggleClouds={() => setShowClouds((prev) => !prev)}
-          onToggleElevation={() => setShowElevation((prev) => !prev)}
+          onToggleElevation={() => {
+            setShowElevation((prev) => {
+              const next = !prev
+              if (next) {
+                setLegendOpen(false)
+              } else {
+                setElevationLegendOpen(false)
+              }
+              return next
+            })
+          }}
         />
-        {selectedCreature && (
-          <CreatureInspector
-            creature={selectedCreature}
-            onClose={() => setSelection(null)}
-            onEditInDesigner={(creature) => {
-              setEditorGenome(creatureToSavedGenome(creature))
-              setEditorOpen(true)
-            }}
-          />
-        )}
-        {selectedPlant && snapshot && (
-          <PlantInspector
-            plant={selectedPlant}
-            soilMoisture={selectedPlantSoilMoisture}
-            temperature={snapshot.stats.temperature}
-            season={snapshot.stats.season}
-            onClose={() => setSelection(null)}
-          />
-        )}
-        {selection?.type === 'soil' && snapshot && (
-          <SoilInspector
-            col={selection.col}
-            row={selection.row}
-            soil={snapshot.soil}
-            terrain={snapshot.terrain}
-            grass={snapshot.grass}
-            woodyPlantCount={selectedSoilWoodyPlantCount}
-            onClose={() => setSelection(null)}
-          />
-        )}
-        {selection?.type === 'air' && snapshot && (
-          <AirInspector
-            col={selection.col}
-            row={selection.row}
-            air={snapshot.air}
-            soil={snapshot.soil}
-            terrain={snapshot.terrain}
-            stats={snapshot.stats}
-            worldWidth={activeSettings.worldWidth}
-            worldHeight={activeSettings.worldHeight}
-            onClose={() => setSelection(null)}
-          />
-        )}
       </div>
       <ChampionHallModal open={hallOpen} onClose={() => setHallOpen(false)} />
       <CreatureEditorModal
         open={editorOpen}
         initialGenome={editorGenome}
         onClose={() => setEditorOpen(false)}
-      />
-      <SettingsModal
-        open={settingsOpen}
-        draft={draftSettings}
-        active={activeSettings}
-        seed={seed}
-        autoChampion={autoChampion}
-        autoPlantChampion={autoPlantChampion}
-        autoPathogenChampion={autoPathogenChampion}
-        onChange={setDraftSettings}
-        onStart={handleStart}
-        onClose={() => setSettingsOpen(false)}
       />
     </div>
   )

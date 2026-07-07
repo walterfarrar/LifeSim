@@ -7,6 +7,8 @@ import {
   PATHOGEN_CHAMPION_SPAWN_CHANCE,
   POND_BASE_RADIUS,
   POND_DEFAULT_MAX_DEPTH,
+  CREATURE_FIRST_SPAWN_DELAY_YEARS,
+  CREATURE_GROUP_SPAWN_INTERVAL_YEARS,
   DAY_LENGTH_SECONDS,
   DAYS_PER_SEASON_YEAR,
   scaledDefaultTotalWater,
@@ -21,6 +23,10 @@ export type SimSettings = {
   worldHeight: number
   creatureGroups: number
   herbivoresPerGroup: number
+  /** Sim-years before the first founder group appears. */
+  creatureFirstSpawnDelayYears: number
+  /** Sim-years between each founder group introduction. */
+  creatureGroupSpawnIntervalYears: number
   initialPlants: number
   maxGrassPlants: number
   maxBushPlants: number
@@ -61,6 +67,8 @@ export const DEFAULT_SIM_SETTINGS: SimSettings = {
   worldHeight: DEFAULT_WORLD_HEIGHT,
   creatureGroups: 3,
   herbivoresPerGroup: Math.max(4, Math.floor(INITIAL_HERBIVORES / 3)),
+  creatureFirstSpawnDelayYears: CREATURE_FIRST_SPAWN_DELAY_YEARS,
+  creatureGroupSpawnIntervalYears: CREATURE_GROUP_SPAWN_INTERVAL_YEARS,
   initialPlants: scaledInitialPlants(DEFAULT_WORLD_WIDTH, DEFAULT_WORLD_HEIGHT),
   ...scaledMaxPlantsByKind(DEFAULT_WORLD_WIDTH, DEFAULT_WORLD_HEIGHT),
   founderGeneSpread: FOUNDER_GENE_SPREAD,

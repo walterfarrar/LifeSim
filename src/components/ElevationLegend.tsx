@@ -75,7 +75,7 @@ export function ElevationLegendPanel({ onClose }: ElevationLegendPanelProps) {
   )
 
   return (
-    <div id="elevation-legend-panel" className="elevation-legend-panel" aria-label="Elevation map legend">
+    <div id="elevation-legend-panel" className="elevation-legend-panel sidebar-legend-panel" aria-label="Elevation map legend">
       <div className="elevation-legend-header">
         <h2 className="elevation-legend-title">Elevation</h2>
         <button type="button" className="elevation-legend-close" onClick={onClose} aria-label="Hide elevation scale">

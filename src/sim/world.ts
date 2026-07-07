@@ -1,4 +1,4 @@
-import { createSingleGroupPopulation } from './dna'
+import { createSingleGroupPopulation, type GroupSpawn } from './dna'
 import {
   createInitialPathogens,
   createPathogenFromChampionDna,
@@ -11,6 +11,7 @@ import { resolvePlantChampionDna } from './plantFounderGenomes'
 import { allPlantKinds, createPlantKindDna, countPlantsByKind, plantKindFromDna } from './plantKinds'
 import { allPlantKindsAtCap, isPlantKindAtCap, maxPlantsForKind } from './plantLimits'
 import { resolvePathogenChampionDna } from './pathogenFounderGenomes'
+import { expressCreatureTraits } from './phenotype'
 import {
   DEFAULT_SIM_SETTINGS,
   totalStartingHerbivores,
@@ -124,8 +125,6 @@ import {
 } from './energyEconomy'
 import type { PlantKind } from './plantKinds'
 import {
-  CREATURE_FIRST_SPAWN_DELAY_YEARS,
-  CREATURE_GROUP_SPAWN_INTERVAL_YEARS,
   PLANT_EXTINCT_WIND_RESEED_CHANCE,
   PLANT_KIND_EXTINCT_RESEED_CHANCE,
   PLANT_WATER_PER_ENERGY,
@@ -155,7 +154,7 @@ import { distributeInitialWorldWater, fundInitialCreatureHydration, fundInitialP
 import { TerrainWater } from './terrainWater'
 import { yearsToTicks } from './timeScale'
 import { Rng } from './rng'
-import type { Corpse, Creature, Plant, WorldSnapshot, WorldStats } from './types'
+import type { Corpse, Creature, Plant, Vec2, WorldSnapshot, WorldStats } from './types'
 
 export class World {
   private plants: Plant[] = []
@@ -439,9 +438,14 @@ export class World {
 
   private resetCreatureSpawnSchedule(): void {
     this.creatureNextGroupIndex = 0
-    this.creatureNextSpawnTick = yearsToTicks(CREATURE_FIRST_SPAWN_DELAY_YEARS)
+    this.creatureNextSpawnTick = yearsToTicks(this.settings.creatureFirstSpawnDelayYears)
     this.creatureIntroCycleComplete = false
     this.creatureSexIndexOffset = 0
+  }
+
+  private resolveCreatureSpawnPosition(spawn: GroupSpawn): Vec2 {
+    const radius = expressCreatureTraits(spawn.dna, 0).radius
+    return this.terrain.resolveDryLandSpawn(this.rng, spawn.position, radius)
   }
 
   private spawnCreatureGroup(groupIndex: number): Creature[] {
@@ -466,7 +470,7 @@ export class World {
       spawned.push(
         createHerbivore(
           this.rng,
-          this.terrain.resolveDryLandSpawn(this.rng, spawn.position),
+          this.resolveCreatureSpawnPosition(spawn),
           spawn.dna,
         ),
       )
@@ -480,19 +484,18 @@ export class World {
     if (newcomers.length === 0) return
     fundInitialCreatureHydration(newcomers, this.terrain, this.atmosphere)
     this.creatures.push(...newcomers)
-    this.stats.births += newcomers.length
   }
 
   /**
-   * Intro cycle: spawn the next settings group every 50 years (even if prior groups died out).
-   * After all groups have appeared once, check every 50 years for extinction and restart if empty.
+   * Intro cycle: spawn each founder group in full every interval (even if prior groups died out).
+   * After all groups have appeared once, check every interval for extinction and restart if empty.
    */
   private tickCreatureSpawning(): void {
     if (totalStartingHerbivores(this.settings) === 0) return
 
     const now = this.stats.tick
     const totalGroups = this.settings.creatureGroups
-    const interval = yearsToTicks(CREATURE_GROUP_SPAWN_INTERVAL_YEARS)
+    const interval = yearsToTicks(this.settings.creatureGroupSpawnIntervalYears)
     if (now < this.creatureNextSpawnTick) return
 
     if (!this.creatureIntroCycleComplete) {
@@ -754,7 +757,7 @@ export class World {
       if (!ate) {
         const footIdx = this.grass.cellIndex(creature.x, creature.y)
         if (!this.grass.isEdibleGrass(footIdx)) {
-          forgetCreatureMemoryNear(creature, 'food', creature.x, creature.y, this.grass.cellSize * 0.75)
+          forgetCreatureMemoryNear(creature, 'food', creature.x, creature.y, Math.min(this.grass.cellW, this.grass.cellH) * 0.75)
         }
       }
 
@@ -969,9 +972,9 @@ export class World {
     const idx = this.grass.cellIndex(x, y)
     if (this.grass.isEdibleGrass(idx)) return true
 
-    const cx = Math.floor(x / this.grass.cellSize)
-    const cy = Math.floor(y / this.grass.cellSize)
-    const cellReach = Math.ceil(seekRange / this.grass.cellSize) + 1
+    const cx = Math.floor(x / this.grass.cellW)
+    const cy = Math.floor(y / this.grass.cellH)
+    const cellReach = Math.ceil(seekRange / Math.min(this.grass.cellW, this.grass.cellH)) + 1
 
     for (let dr = -cellReach; dr <= cellReach; dr++) {
       for (let dc = -cellReach; dc <= cellReach; dc++) {
@@ -1056,7 +1059,7 @@ export class World {
       const surface = this.terrain.findBestSurfaceTarget(memory.x, memory.y, seekRange)
       if (surface) {
         const dist = toroidalDistance(memory, surface)
-        if (dist < seekRange * 0.55 + this.terrain.cellSize) {
+        if (dist < seekRange * 0.55 + Math.min(this.terrain.cellW, this.terrain.cellH)) {
           return pondApproachTarget(
             creature,
             surface,

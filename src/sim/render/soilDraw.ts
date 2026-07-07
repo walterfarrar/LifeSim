@@ -9,20 +9,20 @@ function lerp(a: number, b: number, t: number): number {
 export function drawSoilMoisture(
   ctx: CanvasRenderingContext2D,
   soil: SoilMoistureSnapshot,
-  worldWidth: number,
-  worldHeight: number,
+  _worldWidth: number,
+  _worldHeight: number,
 ): void {
-  const { cols, rows, cellSize, values } = soil
+  const { cols, rows, cellW, cellH, values } = soil
 
   for (let cy = 0; cy < rows; cy++) {
     for (let cx = 0; cx < cols; cx++) {
       const moisture = values[cy * cols + cx] / SOIL_CELL_WATER_CAPACITY
       const wet = Math.min(1, Math.max(0, moisture))
 
-      const x = cx * cellSize
-      const y = cy * cellSize
-      const w = Math.min(cellSize, worldWidth - x)
-      const h = Math.min(cellSize, worldHeight - y)
+      const x = cx * cellW
+      const y = cy * cellH
+      const w = cellW
+      const h = cellH
       if (w <= 0 || h <= 0) continue
 
       const r = Math.round(lerp(186, 54, wet))

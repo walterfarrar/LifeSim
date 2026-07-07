@@ -48,8 +48,6 @@ import { pickCreatureAt } from './creatureHitTest'
 import { pickPlantAt } from './plantHitTest'
 import { soilCellAt } from './soilHitTest'
 import { airCellAt } from './airHitTest'
-import { VisualLegend } from './VisualLegend'
-import { ElevationLegendPanel, ElevationLegendToggle, useElevationLegendOpen } from './ElevationLegend'
 import { InspectModeBar } from './InspectModeBar'
 import { WindIndicator } from './WindIndicator'
 import type { InspectMode, MapSelection } from '../sim/mapSelection'
@@ -115,7 +113,6 @@ export function SimulationCanvas({
     temperature: 20,
   })
   const [windDisplay, setWindDisplay] = useState({ dir: 0, speed: 0 })
-  const [elevationLegendOpen, setElevationLegendOpen] = useElevationLegendOpen()
 
   const showCloudsRef = useRef(showClouds)
   const showElevationRef = useRef(showElevation)
@@ -437,27 +434,12 @@ export function SimulationCanvas({
         </div>
       </div>
       <div className="map-hud map-hud-bottom">
-        <div className="map-hud-bottom-row">
-          <div className={`map-hud-legend-slot${elevationLegendOpen ? ' elevation-legend-open' : ''}`}>
-            {showElevation ? (
-              <ElevationLegendToggle
-                open={elevationLegendOpen}
-                onToggle={() => setElevationLegendOpen((open) => !open)}
-              />
-            ) : (
-              <VisualLegend />
-            )}
-          </div>
-          <InspectModeBar
-            mode={inspectMode}
-            onChange={onInspectModeChange}
-            showElevation={showElevation}
-            onToggleElevation={onToggleElevation}
-          />
-          {showElevation && elevationLegendOpen && (
-            <ElevationLegendPanel onClose={() => setElevationLegendOpen(false)} />
-          )}
-        </div>
+        <InspectModeBar
+          mode={inspectMode}
+          onChange={onInspectModeChange}
+          showElevation={showElevation}
+          onToggleElevation={onToggleElevation}
+        />
       </div>
       <div
         ref={viewportRef}
@@ -629,13 +611,11 @@ function drawSoilSelection(
   soil: WorldSnapshot['soil'],
   col: number,
   row: number,
-  worldWidth: number,
-  worldHeight: number,
 ): void {
-  const x = col * soil.cellSize
-  const y = row * soil.cellSize
-  const w = Math.min(soil.cellSize, worldWidth - x)
-  const h = Math.min(soil.cellSize, worldHeight - y)
+  const x = col * soil.cellW
+  const y = row * soil.cellH
+  const w = soil.cellW
+  const h = soil.cellH
   if (w <= 0 || h <= 0) return
 
   ctx.strokeStyle = VISUAL_THEME.selectionRing
@@ -664,7 +644,7 @@ function drawWorld(
   if (showElevation) {
     drawElevationMap(ctx, terrain, worldWidth, worldHeight)
     if (selectedSoil) {
-      drawSoilSelection(ctx, soil, selectedSoil.col, selectedSoil.row, worldWidth, worldHeight)
+      drawSoilSelection(ctx, soil, selectedSoil.col, selectedSoil.row)
     }
     if (selectedAir) {
       drawAirSelection(ctx, air, selectedAir.col, selectedAir.row, worldWidth, worldHeight)
@@ -679,7 +659,7 @@ function drawWorld(
   drawTerrainWater(ctx, terrain, worldWidth, worldHeight)
 
   if (selectedSoil) {
-    drawSoilSelection(ctx, soil, selectedSoil.col, selectedSoil.row, worldWidth, worldHeight)
+    drawSoilSelection(ctx, soil, selectedSoil.col, selectedSoil.row)
   }
 
   for (const plant of plants) {

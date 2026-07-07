@@ -71,7 +71,7 @@ export function AirInspector({
   const origin = airCellWorldOrigin(air, worldWidth, worldHeight, col, row)
   const windBearing = windBearingDeg(stats.wind.dir)
   const windStrengthPct = Math.round(Math.min(1, stats.wind.speed / WIND_MAX_SPEED) * 100)
-  const soilTilesUnder = Math.round((air.cellW / soil.cellSize) * (air.cellH / soil.cellSize))
+  const soilTilesUnder = Math.round((air.cellW / soil.cellW) * (air.cellH / soil.cellH))
 
   return (
     <section className="map-inspector">

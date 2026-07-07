@@ -41,11 +41,14 @@ import type { SeasonName } from './seasons'
 import type { TerrainWater } from './terrainWater'
 import type { Plant } from './types'
 import { getWorldBounds } from './worldBounds'
+import { computeSoilGridLayout, soilCellAtWorld, soilCellCenterWorld } from './soilGridLayout'
 
 export type GrassCoverSnapshot = {
   cols: number
   rows: number
   cellSize: number
+  cellW: number
+  cellH: number
   energy: Float32Array
   water: Float32Array
   droughtTicks: Float32Array
@@ -110,6 +113,8 @@ export class GrassCover {
   readonly cols: number
   readonly rows: number
   readonly cellSize: number
+  readonly cellW: number
+  readonly cellH: number
   readonly energy: Float32Array
   readonly water: Float32Array
   readonly age: Float32Array
@@ -119,10 +124,12 @@ export class GrassCover {
   private readonly tickLossBudget: Float32Array
 
   constructor(cellSize: number) {
-    const bounds = getWorldBounds()
-    this.cellSize = cellSize
-    this.cols = Math.max(1, Math.ceil(bounds.width / cellSize))
-    this.rows = Math.max(1, Math.ceil(bounds.height / cellSize))
+    const grid = computeSoilGridLayout(cellSize)
+    this.cellSize = grid.cellSize
+    this.cols = grid.cols
+    this.rows = grid.rows
+    this.cellW = grid.cellW
+    this.cellH = grid.cellH
     const n = this.cols * this.rows
     this.energy = new Float32Array(n)
     this.water = new Float32Array(n)
@@ -138,20 +145,14 @@ export class GrassCover {
   }
 
   cellIndex(x: number, y: number): number {
-    const cx = this.wrap(Math.floor(x / this.cellSize), this.cols)
-    const cy = this.wrap(Math.floor(y / this.cellSize), this.rows)
-    return cy * this.cols + cx
+    return soilCellAtWorld(x, y, this.cellW, this.cellH, this.cols, this.rows).index
   }
 
   cellCenter(index: number): { x: number; y: number; col: number; row: number } {
     const col = index % this.cols
     const row = Math.floor(index / this.cols)
-    return {
-      col,
-      row,
-      x: col * this.cellSize + this.cellSize * 0.5,
-      y: row * this.cellSize + this.cellSize * 0.5,
-    }
+    const center = soilCellCenterWorld(col, row, this.cellW, this.cellH)
+    return { col, row, x: center.x, y: center.y }
   }
 
   /** Crown still alive — may be too thin to graze. */
@@ -210,6 +211,8 @@ export class GrassCover {
       cols: this.cols,
       rows: this.rows,
       cellSize: this.cellSize,
+      cellW: this.cellW,
+      cellH: this.cellH,
       energy: this.energy,
       water: this.water,
       droughtTicks: this.droughtTicks,

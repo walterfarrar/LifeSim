@@ -1,5 +1,6 @@
 import { AIR_FULL_HUMIDITY, AIR_GROUND_WET_SURFACE_DEPTH, SOIL_CELL_WATER_CAPACITY } from '../sim/config'
 import { airCellAtWorld } from '../sim/render/airGridLayout'
+import { soilCellAtWorld } from '../sim/soilGridLayout'
 import type { AirGridSnapshot } from '../sim/types'
 import type { SoilMoistureSnapshot } from '../sim/soilMoisture'
 import type { TerrainWaterSnapshot } from '../sim/terrainWater'
@@ -67,10 +68,10 @@ export function groundCellsUnderAirCell(
   worldHeight: number,
 ): { x: number; y: number }[] {
   const { x: baseX, y: baseY } = airCellWorldOrigin(air, worldWidth, worldHeight, col, row)
-  const spanC = Math.ceil(air.cellW / soil.cellSize) + 1
-  const spanR = Math.ceil(air.cellH / soil.cellSize) + 1
-  const soilColStart = Math.floor(baseX / soil.cellSize)
-  const soilRowStart = Math.floor(baseY / soil.cellSize)
+  const spanC = Math.ceil(air.cellW / soil.cellW) + 1
+  const spanR = Math.ceil(air.cellH / soil.cellH) + 1
+  const soilColStart = Math.floor(baseX / soil.cellW)
+  const soilRowStart = Math.floor(baseY / soil.cellH)
   const targetIndex = row * air.cols + col
   const out: { x: number; y: number }[] = []
 
@@ -78,8 +79,8 @@ export function groundCellsUnderAirCell(
     for (let dc = 0; dc < spanC; dc++) {
       const cx = wrapIndex(soilColStart + dc, soil.cols)
       const cy = wrapIndex(soilRowStart + dr, soil.rows)
-      const x = (cx + 0.5) * soil.cellSize
-      const y = (cy + 0.5) * soil.cellSize
+      const x = (cx + 0.5) * soil.cellW
+      const y = (cy + 0.5) * soil.cellH
       if (airCellIndexAtWorld(air, worldWidth, worldHeight, x, y) === targetIndex) {
         out.push({ x, y })
       }
@@ -90,9 +91,7 @@ export function groundCellsUnderAirCell(
 }
 
 function soilCellIndex(soil: SoilMoistureSnapshot, x: number, y: number): number {
-  const col = wrapIndex(Math.floor(x / soil.cellSize), soil.cols)
-  const row = wrapIndex(Math.floor(y / soil.cellSize), soil.rows)
-  return row * soil.cols + col
+  return soilCellAtWorld(x, y, soil.cellW, soil.cellH, soil.cols, soil.rows).index
 }
 
 function groundWetnessAt(

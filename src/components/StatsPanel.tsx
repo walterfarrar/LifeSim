@@ -42,6 +42,7 @@ type StatsPanelProps = {
   hasChampionHall: boolean
   pendingSettingsChanges: boolean
   speedMultiplier: number
+  showElevation: boolean
   onTogglePause: () => void
   onSlower: () => void
   onFaster: () => void
@@ -50,6 +51,8 @@ type StatsPanelProps = {
   onOpenSettings: () => void
   onOpenHall: () => void
   onOpenEditor: () => void
+  onOpenLegend: () => void
+  onOpenElevationScale: () => void
 }
 
 export function StatsPanel({
@@ -64,6 +67,7 @@ export function StatsPanel({
   hasChampionHall,
   pendingSettingsChanges,
   speedMultiplier,
+  showElevation,
   onTogglePause,
   onSlower,
   onFaster,
@@ -72,6 +76,8 @@ export function StatsPanel({
   onOpenSettings,
   onOpenHall,
   onOpenEditor,
+  onOpenLegend,
+  onOpenElevationScale,
 }: StatsPanelProps) {
   const leadingDeathCauses = topDeathCauses(stats.deathCauseCounts)
 
@@ -85,16 +91,37 @@ export function StatsPanel({
             {paused && <span className="paused-label"> · Paused</span>}
           </p>
         </div>
-        <button
-          type="button"
-          className="settings-toggle"
-          onClick={onOpenSettings}
-          aria-label="Open simulation settings"
-          title="Simulation settings"
-        >
-          ⚙
-          {pendingSettingsChanges && <span className="settings-badge" aria-hidden />}
-        </button>
+        <div className="stats-header-actions">
+          {showElevation ? (
+            <button
+              type="button"
+              className="sidebar-nav-btn"
+              onClick={onOpenElevationScale}
+              title="Elevation color scale"
+            >
+              Scale
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="sidebar-nav-btn"
+              onClick={onOpenLegend}
+              title="Map symbols and colors"
+            >
+              Legend
+            </button>
+          )}
+          <button
+            type="button"
+            className="settings-toggle"
+            onClick={onOpenSettings}
+            aria-label="Open simulation settings"
+            title="Simulation settings"
+          >
+            ⚙
+            {pendingSettingsChanges && <span className="settings-badge" aria-hidden />}
+          </button>
+        </div>
       </header>
 
       <dl className="stats-grid">
@@ -314,7 +341,7 @@ export function StatsPanel({
       </div>
 
       <p className="stats-hint">
-        Open <strong>Legend</strong> on the map for mode colors and overlays.
+        Open <strong>Legend</strong> above for mode colors and overlays.
         {autoChampion && (
           <>
             {' '}

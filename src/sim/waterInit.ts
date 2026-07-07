@@ -88,7 +88,7 @@ export function fundInitialCreatureHydration(
       }
     }
 
-    creature.hydration = funded
+    creature.hydration = funded > 0 ? Math.min(target, funded) : target
   }
 }
 

@@ -117,7 +117,7 @@ export function SoilInspector({
       <dl className="inspector-grid">
         <div>
           <dt>Cell size</dt>
-          <dd>{soil.cellSize}×{soil.cellSize}</dd>
+          <dd>{fmt(soil.cellW, 0)}×{fmt(soil.cellH, 0)}</dd>
         </div>
         <div>
           <dt>Center</dt>

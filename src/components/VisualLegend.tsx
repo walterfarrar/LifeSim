@@ -25,6 +25,16 @@ function saveLegendOpen(open: boolean): void {
   }
 }
 
+export function useVisualLegendOpen() {
+  const [open, setOpen] = useState(loadLegendOpen)
+
+  useEffect(() => {
+    saveLegendOpen(open)
+  }, [open])
+
+  return [open, setOpen] as const
+}
+
 type LegendItemProps = {
   label: string
   detail?: string
@@ -73,164 +83,134 @@ function CircleSwatch({
   )
 }
 
-export function VisualLegend() {
-  const [open, setOpen] = useState(loadLegendOpen)
+type VisualLegendPanelProps = {
+  onClose: () => void
+}
 
-  useEffect(() => {
-    saveLegendOpen(open)
-  }, [open])
-
+export function VisualLegendPanel({ onClose }: VisualLegendPanelProps) {
   return (
-    <div className={`visual-legend${open ? ' open' : ''}`}>
-      {open && (
+    <section id="visual-legend-panel" className="legend-panel sidebar-legend-panel" aria-label="Visual legend">
+      <header className="legend-panel-header">
+        <h2>Map legend</h2>
         <button
           type="button"
-          className="legend-backdrop"
-          onClick={() => setOpen(false)}
-          aria-label="Close legend"
-        />
-      )}
-      <button
-        type="button"
-        className="legend-toggle"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        aria-controls="visual-legend-panel"
-      >
-        {open ? 'Hide legend' : 'Legend'}
-      </button>
+          className="legend-panel-close"
+          onClick={onClose}
+          aria-label="Back to stats"
+        >
+          ×
+        </button>
+      </header>
 
-      {open && (
-        <section id="visual-legend-panel" className="legend-panel" aria-label="Visual legend">
-          <header className="legend-panel-header">
-            <h2>Map legend</h2>
-            <button
-              type="button"
-              className="legend-panel-close"
-              onClick={() => setOpen(false)}
-              aria-label="Close legend"
+      <div className="legend-section">
+        <h3>Behavior modes</h3>
+        <ul className="legend-list">
+          {(Object.keys(MODE_RING_COLORS) as CreatureMode[]).map((mode) => (
+            <LegendItem
+              key={mode}
+              label={MODE_LABELS[mode]}
+              detail={MODE_DESCRIPTIONS[mode]}
             >
-              ×
-            </button>
-          </header>
+              <ModeRingSwatch mode={mode} />
+            </LegendItem>
+          ))}
+        </ul>
+      </div>
 
-          <div className="legend-section">
-            <h3>Behavior modes</h3>
-            <ul className="legend-list">
-              {(Object.keys(MODE_RING_COLORS) as CreatureMode[]).map((mode) => (
-                <LegendItem
-                  key={mode}
-                  label={MODE_LABELS[mode]}
-                  detail={MODE_DESCRIPTIONS[mode]}
-                >
-                  <ModeRingSwatch mode={mode} />
-                </LegendItem>
-              ))}
-            </ul>
-          </div>
+      <div className="legend-section">
+        <h3>Creatures</h3>
+        <ul className="legend-list">
+          <LegendItem label="Body color" detail="From DNA hue; lightness shows energy">
+            <CircleSwatch color={VISUAL_THEME.creatureSample} filled />
+          </LegendItem>
+          <LegendItem label="Female tint" detail="Slightly shifted hue vs males">
+            <CircleSwatch color={VISUAL_THEME.creatureFemaleSample} filled />
+          </LegendItem>
+          <LegendItem label="Vision range" detail="Wraps across map edges; toroidal sight">
+            <CircleSwatch color={VISUAL_THEME.visionRing} wide />
+          </LegendItem>
+          <LegendItem label="Pregnant" detail="Pink dashed outer ring">
+            <CircleSwatch color={VISUAL_THEME.pregnancyRing} dashed />
+          </LegendItem>
+        </ul>
+      </div>
 
-          <div className="legend-section">
-            <h3>Creatures</h3>
-            <ul className="legend-list">
-              <LegendItem label="Body color" detail="From DNA hue; lightness shows energy">
-                <CircleSwatch color={VISUAL_THEME.creatureSample} filled />
-              </LegendItem>
-              <LegendItem label="Female tint" detail="Slightly shifted hue vs males">
-                <CircleSwatch color={VISUAL_THEME.creatureFemaleSample} filled />
-              </LegendItem>
-              <LegendItem label="Vision range" detail="Wraps across map edges; toroidal sight">
-                <CircleSwatch color={VISUAL_THEME.visionRing} wide />
-              </LegendItem>
-              <LegendItem label="Pregnant" detail="Pink dashed outer ring">
-                <CircleSwatch color={VISUAL_THEME.pregnancyRing} dashed />
-              </LegendItem>
-            </ul>
-          </div>
+      <div className="legend-section">
+        <h3>Inspect mode</h3>
+        <ul className="legend-list">
+          <LegendItem label="Creature / Plant / Soil / Air" detail="Pick a mode on the map, then click to inspect">
+            <CircleSwatch color={VISUAL_THEME.selectionRing} />
+          </LegendItem>
+          <LegendItem label="Personal space" detail="Shown on selected creatures only">
+            <CircleSwatch color={VISUAL_THEME.personalSpaceRing} dashed wide />
+          </LegendItem>
+          <LegendItem label="Attack reach" detail="Aggressive creatures only">
+            <CircleSwatch color={VISUAL_THEME.attackRangeRing} wide />
+          </LegendItem>
+        </ul>
+      </div>
 
-          <div className="legend-section">
-            <h3>Inspect mode</h3>
-            <ul className="legend-list">
-              <LegendItem label="Creature / Plant / Soil" detail="Pick a mode on the map, then click to inspect">
-                <CircleSwatch color={VISUAL_THEME.selectionRing} />
-              </LegendItem>
-              <LegendItem label="Personal space" detail="Shown on selected creatures only">
-                <CircleSwatch color={VISUAL_THEME.personalSpaceRing} dashed wide />
-              </LegendItem>
-              <LegendItem label="Attack reach" detail="Aggressive creatures only">
-                <CircleSwatch color={VISUAL_THEME.attackRangeRing} wide />
-              </LegendItem>
-            </ul>
-          </div>
+      <div className="legend-section">
+        <h3>Plant lineages</h3>
+        <ul className="legend-list">
+          <LegendItem label="Grass turf" detail="Middle layer on soil — one strain per tile; spreads to neighbors">
+            <span className="legend-plant-grass" aria-hidden />
+          </LegendItem>
+          <LegendItem label="Deciduous" detail="Low lumpy shrubs; active spring–autumn, dormant in winter">
+            <span className="legend-plant-bush" aria-hidden />
+          </LegendItem>
+          <LegendItem label="Conifer" detail="Tall evergreen tiers on a trunk; hardy year-round">
+            <span className="legend-plant-tree" aria-hidden />
+          </LegendItem>
+        </ul>
+      </div>
 
-          <div className="legend-section">
-            <h3>Plant lineages</h3>
-            <ul className="legend-list">
-              <LegendItem label="Grass turf" detail="Middle layer on soil — one strain per tile; spreads to neighbors">
-                <span className="legend-plant-grass" aria-hidden />
-              </LegendItem>
-              <LegendItem label="Deciduous" detail="Low lumpy shrubs; active spring–autumn, dormant in winter">
-                <span className="legend-plant-bush" aria-hidden />
-              </LegendItem>
-              <LegendItem label="Conifer" detail="Tall evergreen tiers on a trunk; hardy year-round">
-                <span className="legend-plant-tree" aria-hidden />
-              </LegendItem>
-            </ul>
-          </div>
+      <div className="legend-section">
+        <h3>Environment</h3>
+        <ul className="legend-list">
+          <LegendItem label="Plant color" detail="Green hue from DNA; brightness shows energy">
+            <CircleSwatch color={VISUAL_THEME.plantHealthy} filled />
+          </LegendItem>
+          <LegendItem label="Plant (low energy)" detail="Darker when eaten down; may die">
+            <CircleSwatch color={VISUAL_THEME.plantDim} filled />
+          </LegendItem>
+          <LegendItem label="Infected" detail="Purple dashed ring; severity widens ring">
+            <CircleSwatch color={VISUAL_THEME.infectionRing} dashed />
+          </LegendItem>
+          <LegendItem label="Corpse" detail="Dead creature; scavenged or decays away">
+            <CircleSwatch color={VISUAL_THEME.corpseSample} filled />
+          </LegendItem>
+          <LegendItem label="Surface water" detail="Top layer over grass — darker blue in low, full tiles; shallow film still stresses turf">
+            <CircleSwatch color={VISUAL_THEME.pondSample} filled wide />
+          </LegendItem>
+          <LegendItem label="Soil moisture" detail="Bottom layer — moisture in the soil column; surface water infiltrates over time">
+            <span className="legend-soil-swatch" aria-hidden>
+              <span className="legend-soil-dry" style={{ backgroundColor: VISUAL_THEME.soilDrySample }} />
+              <span className="legend-soil-wet" style={{ backgroundColor: VISUAL_THEME.soilWetSample }} />
+            </span>
+          </LegendItem>
+          <LegendItem label="Temperature" detail="Off-ideal temps slow plant growth; only extreme heat or cold is lethal">
+            <span className="legend-temp-swatch" aria-hidden>
+              <span className="legend-temp-cold" />
+              <span className="legend-temp-ideal" />
+              <span className="legend-temp-hot" />
+            </span>
+          </LegendItem>
+          <LegendItem label="Day & night" detail="Window frame (outside→in): season at edge, time of day (blue night / orange dawn-dusk / yellow day), rain when wet">
+            <span className="legend-day-night" aria-hidden>
+              <span className="legend-day-half" />
+              <span className="legend-night-half" />
+            </span>
+          </LegendItem>
+          <LegendItem label="Rain" detail="Refills soil and fills low terrain depressions (see stats panel)">
+            <CircleSwatch color="rgba(100, 160, 220, 0.6)" filled wide />
+          </LegendItem>
+        </ul>
+      </div>
 
-          <div className="legend-section">
-            <h3>Environment</h3>
-            <ul className="legend-list">
-              <LegendItem label="Plant color" detail="Green hue from DNA; brightness shows energy">
-                <CircleSwatch color={VISUAL_THEME.plantHealthy} filled />
-              </LegendItem>
-              <LegendItem label="Plant (low energy)" detail="Darker when eaten down; may die">
-                <CircleSwatch color={VISUAL_THEME.plantDim} filled />
-              </LegendItem>
-              <LegendItem label="Infected" detail="Purple dashed ring; severity widens ring">
-                <CircleSwatch color={VISUAL_THEME.infectionRing} dashed />
-              </LegendItem>
-              <LegendItem label="Corpse" detail="Dead creature; scavenged or decays away">
-                <CircleSwatch color={VISUAL_THEME.corpseSample} filled />
-              </LegendItem>
-              <LegendItem label="Surface water" detail="Top layer over grass — darker blue in low, full tiles; shallow film still stresses turf">
-                <CircleSwatch color={VISUAL_THEME.pondSample} filled wide />
-              </LegendItem>
-              <LegendItem label="Soil moisture" detail="Bottom layer — moisture in the soil column; surface water infiltrates over time">
-                <span className="legend-soil-swatch" aria-hidden>
-                  <span className="legend-soil-dry" style={{ backgroundColor: VISUAL_THEME.soilDrySample }} />
-                  <span className="legend-soil-wet" style={{ backgroundColor: VISUAL_THEME.soilWetSample }} />
-                </span>
-              </LegendItem>
-              <LegendItem label="Temperature" detail="Off-ideal temps slow plant growth; only extreme heat or cold is lethal">
-                <span className="legend-temp-swatch" aria-hidden>
-                  <span className="legend-temp-cold" />
-                  <span className="legend-temp-ideal" />
-                  <span className="legend-temp-hot" />
-                </span>
-              </LegendItem>
-              <LegendItem label="Day & night" detail="Window frame (outside→in): season at edge, time of day (blue night / orange dawn-dusk / yellow day), rain when wet">
-                <span className="legend-day-night" aria-hidden>
-                  <span className="legend-day-half" />
-                  <span className="legend-night-half" />
-                </span>
-              </LegendItem>
-              <LegendItem label="Rain" detail="Refills soil and fills low terrain depressions (see stats panel)">
-                <CircleSwatch color="rgba(100, 160, 220, 0.6)" filled wide />
-              </LegendItem>
-            </ul>
-          </div>
-
-          <p className="legend-footnote">
-            Space pauses · Pick inspect mode · Click map to inspect · Esc closes panel · ⚙ for start settings
-          </p>
-
-          <footer className="legend-panel-footer">
-            <button type="button" className="legend-panel-close-full" onClick={() => setOpen(false)}>
-              Close legend
-            </button>
-          </footer>
-        </section>
-      )}
-    </div>
+      <p className="legend-footnote">
+        Space pauses · Pick inspect mode · Click map to inspect · Esc returns to stats · ⚙ for start settings
+      </p>
+    </section>
   )
 }

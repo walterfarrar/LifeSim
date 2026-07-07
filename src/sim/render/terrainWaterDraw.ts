@@ -8,10 +8,10 @@ import {
 export function drawTerrainHeight(
   ctx: CanvasRenderingContext2D,
   terrain: TerrainWaterSnapshot,
-  worldWidth: number,
-  worldHeight: number,
+  _worldWidth: number,
+  _worldHeight: number,
 ): void {
-  const { cols, rows, cellSize, height } = terrain
+  const { cols, rows, cellW, cellH, height } = terrain
 
   for (let cy = 0; cy < rows; cy++) {
     for (let cx = 0; cx < cols; cx++) {
@@ -19,10 +19,10 @@ export function drawTerrainHeight(
       const low = elevationBasinFactor(height[idx])
       if (low < 0.08) continue
 
-      const x = cx * cellSize
-      const y = cy * cellSize
-      const w = Math.min(cellSize, worldWidth - x)
-      const h = Math.min(cellSize, worldHeight - y)
+      const x = cx * cellW
+      const y = cy * cellH
+      const w = cellW
+      const h = cellH
       if (w <= 0 || h <= 0) continue
 
       const alpha = low * 0.14
@@ -36,10 +36,10 @@ export function drawTerrainHeight(
 export function drawTerrainWater(
   ctx: CanvasRenderingContext2D,
   terrain: TerrainWaterSnapshot,
-  worldWidth: number,
-  worldHeight: number,
+  _worldWidth: number,
+  _worldHeight: number,
 ): void {
-  const { cols, rows, cellSize, surfaceWater, maxSurfaceWater } = terrain
+  const { cols, rows, cellW, cellH, surfaceWater, maxSurfaceWater } = terrain
 
   for (let cy = 0; cy < rows; cy++) {
     for (let cx = 0; cx < cols; cx++) {
@@ -50,10 +50,10 @@ export function drawTerrainWater(
       )
       if (!appearance) continue
 
-      const x = cx * cellSize
-      const y = cy * cellSize
-      const w = Math.min(cellSize, worldWidth - x)
-      const h = Math.min(cellSize, worldHeight - y)
+      const x = cx * cellW
+      const y = cy * cellH
+      const w = cellW
+      const h = cellH
       if (w <= 0 || h <= 0) continue
 
       const { r, g, b, alpha, fill } = appearance

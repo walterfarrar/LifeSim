@@ -40,11 +40,14 @@ import { toroidalDelta, wrapPosition } from './toroidal'
 import type { SoilMoisture } from './soilMoisture'
 import type { Creature, Vec2 } from './types'
 import { getWorldBounds } from './worldBounds'
+import { computeSoilGridLayout, soilCellAtWorld } from './soilGridLayout'
 
 export type TerrainWaterSnapshot = {
   cols: number
   rows: number
   cellSize: number
+  cellW: number
+  cellH: number
   /** Flow/shading elevation (includes pond carve). Same units as elevation. */
   height: Float32Array
   /** Rolling-hill elevation before pond carve (≈ TERRAIN_ELEVATION_MIN–MAX). */
@@ -153,6 +156,10 @@ export class TerrainWater {
   readonly cols: number
   readonly rows: number
   readonly cellSize: number
+  readonly cellW: number
+  readonly cellH: number
+  readonly gridWidth: number
+  readonly gridHeight: number
   /** Flow/shading elevation (includes pond carve). */
   readonly height: Float32Array
   /** Rolling-hill elevation before pond carve. */
@@ -167,10 +174,14 @@ export class TerrainWater {
   pondMaxDepth = POND_DEFAULT_MAX_DEPTH
 
   constructor(cellSize = SOIL_CELL_SIZE) {
-    const bounds = getWorldBounds()
-    this.cellSize = cellSize
-    this.cols = Math.max(1, Math.ceil(bounds.width / cellSize))
-    this.rows = Math.max(1, Math.ceil(bounds.height / cellSize))
+    const grid = computeSoilGridLayout(cellSize)
+    this.cellSize = grid.cellSize
+    this.cols = grid.cols
+    this.rows = grid.rows
+    this.cellW = grid.cellW
+    this.cellH = grid.cellH
+    this.gridWidth = grid.gridWidth
+    this.gridHeight = grid.gridHeight
     const n = this.cols * this.rows
     this.height = new Float32Array(n)
     this.elevation = new Float32Array(n)
@@ -362,6 +373,8 @@ export class TerrainWater {
       cols: this.cols,
       rows: this.rows,
       cellSize: this.cellSize,
+      cellW: this.cellW,
+      cellH: this.cellH,
       height: this.height,
       elevation: this.elevation,
       surfaceWater: this.surfaceWater,
@@ -424,9 +437,7 @@ export class TerrainWater {
   }
 
   cellIndex(x: number, y: number): number {
-    const cx = this.wrap(Math.floor(x / this.cellSize), this.cols)
-    const cy = this.wrap(Math.floor(y / this.cellSize), this.rows)
-    return cy * this.cols + cx
+    return soilCellAtWorld(x, y, this.cellW, this.cellH, this.cols, this.rows).index
   }
 
   sampleDepth(x: number, y: number): number {
@@ -447,38 +458,90 @@ export class TerrainWater {
     return this.pondMask[this.cellIndex(x, y)] === 1
   }
 
-  /** Keep spawns on dry land — nudge away from the pond when needed. */
-  resolveDryLandSpawn(rng: Rng, position: Vec2): Vec2 {
-    if (!this.isPondAt(position.x, position.y)) {
-      return wrapPosition(position)
+  /** Keep spawns off standing water deep enough to drown the entity (same rule as {@link isSubmerged}). */
+  resolveDryLandSpawn(rng: Rng, position: Vec2, entityRadius: number): Vec2 {
+    const wrapped = wrapPosition(position)
+    if (this.isSafeCreatureSpawn(wrapped.x, wrapped.y, entityRadius)) {
+      return wrapped
     }
 
+    if (this.isPondAt(wrapped.x, wrapped.y)) {
+      const fromBasin = this.pushSpawnFromBasin(wrapped)
+      if (this.isSafeCreatureSpawn(fromBasin.x, fromBasin.y, entityRadius)) return fromBasin
+    }
+
+    for (let ring = 1; ring <= 20; ring++) {
+      const dist = Math.min(this.cellW, this.cellH) * ring * 0.75
+      const steps = Math.max(8, ring * 4)
+      for (let step = 0; step < steps; step++) {
+        const angle = (step / steps) * Math.PI * 2 + rng.range(-0.15, 0.15)
+        const candidate = wrapPosition({
+          x: position.x + Math.cos(angle) * dist,
+          y: position.y + Math.sin(angle) * dist,
+        })
+        if (this.isSafeCreatureSpawn(candidate.x, candidate.y, entityRadius)) return candidate
+      }
+    }
+
+    for (let attempt = 0; attempt < 96; attempt++) {
+      const cx = rng.int(0, this.cols - 1)
+      const cy = rng.int(0, this.rows - 1)
+      const candidate = this.cellWorldCenter(cx, cy)
+      if (this.isSafeCreatureSpawn(candidate.x, candidate.y, entityRadius)) return candidate
+    }
+
+    const fallback = this.findSafeSpawnCell(rng, entityRadius)
+    if (fallback) return fallback
+
+    return wrapped
+  }
+
+  private isSafeCreatureSpawn(x: number, y: number, entityRadius: number): boolean {
+    if (this.isSubmerged(x, y, entityRadius)) return false
+    const probe = entityRadius * 0.55
+    const offsets = [
+      [probe, 0],
+      [-probe, 0],
+      [0, probe],
+      [0, -probe],
+    ]
+    for (const [ox, oy] of offsets) {
+      if (this.isSubmerged(x + ox, y + oy, entityRadius)) return false
+    }
+    return true
+  }
+
+  private findSafeSpawnCell(rng: Rng, entityRadius: number): Vec2 | null {
+    const safe: number[] = []
+    for (let i = 0; i < this.surfaceWater.length; i++) {
+      const cx = i % this.cols
+      const cy = Math.floor(i / this.cols)
+      const center = this.cellWorldCenter(cx, cy)
+      if (this.isSafeCreatureSpawn(center.x, center.y, entityRadius)) {
+        safe.push(i)
+      }
+    }
+    if (safe.length === 0) return null
+    const pick = safe[rng.int(0, safe.length - 1)]
+    return this.cellWorldCenter(pick % this.cols, Math.floor(pick / this.cols))
+  }
+
+  private pushSpawnFromBasin(position: Vec2): Vec2 {
     const outer = this.basinRadius * POND_OUTER_RADIUS_SCALE
-    const push = outer + this.cellSize * 2
+    const push = outer + Math.min(this.cellW, this.cellH) * 2
     const { dx, dy } = toroidalDelta(position, this.basinCenter)
     const dist = Math.max(1e-3, Math.hypot(dx, dy))
 
+    let candidate = wrapPosition(position)
     for (let attempt = 0; attempt < 12; attempt++) {
-      const scale = push / dist + attempt * this.cellSize * 0.5
-      const candidate = wrapPosition({
+      const scale = push / dist + attempt * Math.min(this.cellW, this.cellH) * 0.5
+      candidate = wrapPosition({
         x: this.basinCenter.x + dx * scale,
         y: this.basinCenter.y + dy * scale,
       })
-      if (!this.isPondAt(candidate.x, candidate.y)) return candidate
     }
 
-    for (let attempt = 0; attempt < 48; attempt++) {
-      const cx = rng.int(0, this.cols - 1)
-      const cy = rng.int(0, this.rows - 1)
-      if (this.pondMask[cy * this.cols + cx] === 1) continue
-      return this.cellWorldCenter(cx, cy)
-    }
-
-    const angle = rng.range(0, Math.PI * 2)
-    return wrapPosition({
-      x: this.basinCenter.x + Math.cos(angle) * push,
-      y: this.basinCenter.y + Math.sin(angle) * push,
-    })
+    return candidate
   }
 
   /** Standing water available for drinking at a world position. */
@@ -666,9 +729,9 @@ export class TerrainWater {
   }
 
   findBestSurfaceTarget(x: number, y: number, seekRange: number): SurfaceWaterTarget | null {
-    const cellRange = Math.ceil(seekRange / this.cellSize) + 1
-    const cx0 = this.wrap(Math.floor(x / this.cellSize), this.cols)
-    const cy0 = this.wrap(Math.floor(y / this.cellSize), this.rows)
+    const cellRange = Math.ceil(seekRange / Math.min(this.cellW, this.cellH)) + 1
+    const cx0 = this.wrap(Math.floor(x / this.cellW), this.cols)
+    const cy0 = this.wrap(Math.floor(y / this.cellH), this.rows)
 
     let best: SurfaceWaterTarget | null = null
     let bestScore = -1
@@ -705,11 +768,11 @@ export class TerrainWater {
     const { dx, dy } = toroidalDelta(from, waterCenter)
     const dist = Math.hypot(dx, dy)
     if (dist < 1e-3) {
-      return wrapPosition({ x: waterCenter.x + this.cellSize * 0.5 + margin, y: waterCenter.y })
+      return wrapPosition({ x: waterCenter.x + this.cellW * 0.5 + margin, y: waterCenter.y })
     }
     const nx = dx / dist
     const ny = dy / dist
-    const shoreDist = this.cellSize * 0.48 + margin
+    const shoreDist = Math.min(this.cellW, this.cellH) * 0.48 + margin
     return wrapPosition({
       x: waterCenter.x + nx * shoreDist,
       y: waterCenter.y + ny * shoreDist,
@@ -735,7 +798,7 @@ export class TerrainWater {
       this.height[cellIdx],
       this.surfaceWater[cellIdx],
       this.maxSurfaceWater[cellIdx],
-      this.cellSize,
+      Math.min(this.cellW, this.cellH),
     )
   }
 
@@ -758,9 +821,9 @@ export class TerrainWater {
     if (bestDepth <= 0.5) {
       bestDepth = 0
       const reach = traits.radius + traits.forageReach * 0.35
-      const cellRange = Math.ceil(reach / this.cellSize)
-      const cx0 = this.wrap(Math.floor(creature.x / this.cellSize), this.cols)
-      const cy0 = this.wrap(Math.floor(creature.y / this.cellSize), this.rows)
+      const cellRange = Math.ceil(reach / Math.min(this.cellW, this.cellH))
+      const cx0 = this.wrap(Math.floor(creature.x / this.cellW), this.cols)
+      const cy0 = this.wrap(Math.floor(creature.y / this.cellH), this.rows)
       for (let dy = -cellRange; dy <= cellRange; dy++) {
         for (let dx = -cellRange; dx <= cellRange; dx++) {
           const cx = this.wrap(cx0 + dx, this.cols)
@@ -799,8 +862,8 @@ export class TerrainWater {
 
   private cellWorldCenter(cx: number, cy: number): Vec2 {
     return {
-      x: (cx + 0.5) * this.cellSize,
-      y: (cy + 0.5) * this.cellSize,
+      x: (cx + 0.5) * this.cellW,
+      y: (cy + 0.5) * this.cellH,
     }
   }
 }
