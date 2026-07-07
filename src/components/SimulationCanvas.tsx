@@ -17,6 +17,7 @@ import { drawTerrainHeight, drawTerrainWater } from '../sim/render/terrainWaterD
 import { drawSoilMoisture } from '../sim/render/soilDraw'
 import { drawGrassCover } from '../sim/render/grassDraw'
 import { drawAirHumidity } from '../sim/render/airDraw'
+import { airCellWorldRects } from '../sim/render/airGridLayout'
 import { drawElevationMap } from '../sim/render/elevationDraw'
 import { moistureGrowthFactor } from '../sim/soilMoisture'
 import { temperatureComfortFactor } from '../sim/temperature'
@@ -46,6 +47,7 @@ import {
 import { pickCreatureAt } from './creatureHitTest'
 import { pickPlantAt } from './plantHitTest'
 import { soilCellAt } from './soilHitTest'
+import { airCellAt } from './airHitTest'
 import { VisualLegend } from './VisualLegend'
 import { ElevationLegendPanel, ElevationLegendToggle, useElevationLegendOpen } from './ElevationLegend'
 import { InspectModeBar } from './InspectModeBar'
@@ -312,22 +314,26 @@ export function SimulationCanvas({
 
       if (inspectMode === 'creature') {
         const hit = pickCreatureAt(snapshot.creatures, point.x, point.y, world.width, world.height)
-        if (hit) {
-          onSelect({ type: 'creature', id: hit.id })
-          return
-        }
+        onSelect(hit ? { type: 'creature', id: hit.id } : null)
+        return
       }
 
       if (inspectMode === 'plant') {
         const hit = pickPlantAt(snapshot.plants, point.x, point.y, world.width, world.height)
-        if (hit) {
-          onSelect({ type: 'plant', id: hit.id })
-          return
-        }
+        onSelect(hit ? { type: 'plant', id: hit.id } : null)
+        return
       }
 
-      const cell = soilCellAt(snapshot.soil, point.x, point.y)
-      onSelect({ type: 'soil', col: cell.col, row: cell.row })
+      if (inspectMode === 'soil') {
+        const cell = soilCellAt(snapshot.soil, point.x, point.y)
+        onSelect({ type: 'soil', col: cell.col, row: cell.row })
+        return
+      }
+
+      if (inspectMode === 'air') {
+        const cell = airCellAt(snapshot.air, world.width, world.height, point.x, point.y)
+        onSelect({ type: 'air', col: cell.col, row: cell.row })
+      }
     },
     [inspectMode, onSelect],
   )
@@ -591,6 +597,33 @@ function drawCreatureAt(
   }
 }
 
+function drawAirSelection(
+  ctx: CanvasRenderingContext2D,
+  air: WorldSnapshot['air'],
+  col: number,
+  row: number,
+  worldWidth: number,
+  worldHeight: number,
+): void {
+  const rects = airCellWorldRects(
+    col,
+    row,
+    air.cellW,
+    air.cellH,
+    air.offsetX,
+    air.offsetY,
+    worldWidth,
+    worldHeight,
+  )
+
+  ctx.strokeStyle = VISUAL_THEME.selectionRing
+  ctx.lineWidth = 2.5
+
+  for (const rect of rects) {
+    ctx.strokeRect(rect.x + 1.5, rect.y + 1.5, Math.max(0, rect.w - 3), Math.max(0, rect.h - 3))
+  }
+}
+
 function drawSoilSelection(
   ctx: CanvasRenderingContext2D,
   soil: WorldSnapshot['soil'],
@@ -623,6 +656,7 @@ function drawWorld(
   const selectedCreatureId = selection?.type === 'creature' ? selection.id : null
   const selectedPlantId = selection?.type === 'plant' ? selection.id : null
   const selectedSoil = selection?.type === 'soil' ? selection : null
+  const selectedAir = selection?.type === 'air' ? selection : null
 
   ctx.fillStyle = VISUAL_THEME.canvasBackground
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
@@ -631,6 +665,9 @@ function drawWorld(
     drawElevationMap(ctx, terrain, worldWidth, worldHeight)
     if (selectedSoil) {
       drawSoilSelection(ctx, soil, selectedSoil.col, selectedSoil.row, worldWidth, worldHeight)
+    }
+    if (selectedAir) {
+      drawAirSelection(ctx, air, selectedAir.col, selectedAir.row, worldWidth, worldHeight)
     }
     return
   }
@@ -682,5 +719,9 @@ function drawWorld(
   // Clouds sit above everything as the top atmospheric layer.
   if (showClouds) {
     drawAirHumidity(ctx, air, worldWidth, worldHeight)
+  }
+
+  if (selectedAir) {
+    drawAirSelection(ctx, air, selectedAir.col, selectedAir.row, worldWidth, worldHeight)
   }
 }

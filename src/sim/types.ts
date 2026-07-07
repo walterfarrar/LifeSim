@@ -147,9 +147,16 @@ export interface WorldStats {
 export interface AirGridSnapshot {
   cols: number
   rows: number
+  /** Nominal square cell size (for display); geometry uses cellW/cellH. */
   cellSize: number
+  /** Render cell width — cols·cellW spans exactly the world so wraps have no overlap. */
+  cellW: number
+  /** Render cell height — rows·cellH spans exactly the world. */
+  cellH: number
   /** Vapor units per cell (0 … cellCapacity). */
   vapor: Float32Array
+  /** Per-cell raining latch (1 = actively precipitating). */
+  raining: Uint8Array
   cellCapacity: number
   /** Continuous wind offset of the whole field (world px), wrapped at the map edges. */
   offsetX: number

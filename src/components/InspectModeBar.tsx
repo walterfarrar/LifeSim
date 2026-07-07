@@ -11,6 +11,7 @@ const MODES: Array<{ id: InspectMode; label: string; hint: string }> = [
   { id: 'creature', label: 'Creature', hint: 'Click a creature to inspect it' },
   { id: 'plant', label: 'Plant', hint: 'Click a plant to inspect it' },
   { id: 'soil', label: 'Soil', hint: 'Click a tile to inspect soil and surface water' },
+  { id: 'air', label: 'Air', hint: 'Click a cloud tile to inspect air moisture' },
 ]
 
 export function InspectModeBar({

@@ -433,6 +433,11 @@ export class TerrainWater {
     return this.surfaceWater[this.cellIndex(x, y)]
   }
 
+  /** Remaining standing-water capacity at a world position (0 on tiles that can't pool). */
+  surfaceRoomAt(x: number, y: number): number {
+    return this.surfaceRoom(this.cellIndex(x, y))
+  }
+
   sampleHeight(x: number, y: number): number {
     return this.height[this.cellIndex(x, y)]
   }

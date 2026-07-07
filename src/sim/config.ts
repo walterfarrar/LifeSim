@@ -209,8 +209,8 @@ export const AIR_CELL_SIZE = SOIL_CELL_SIZE * AIR_CELL_SIZE_MULT
 export const AIR_CELL_WATER_CAPACITY = 20 * AIR_CELL_SIZE_MULT
 
 /** Wind advection — world px/tick the whole air field drifts, evolving by a slow random walk. */
-export const WIND_MAX_SPEED = 0.9
-export const WIND_MIN_SPEED = 0.12
+export const WIND_MAX_SPEED = 1.1
+export const WIND_MIN_SPEED = 0.15
 /** Per-tick random-walk step for wind speed (world px/tick) and direction (radians). */
 export const WIND_SPEED_DRIFT = 0.01
 export const WIND_DIR_DRIFT = 0.025
@@ -225,6 +225,24 @@ export const RAIN_ARM_HUMIDITY = 0.72
 export const RAIN_PRECIP_FRACTION = 0.055
 /** Minimum water units precipitated per tick while raining. */
 export const RAIN_PRECIP_BASE = 14
+
+/**
+ * Cloud moisture states: filling (absorbing over wet ground), full (100% humidity), raining
+ * (emptying until dry). Rain only begins at 100% when over drier ground, or on a random roll whose
+ * chance drops sharply when standing surface water below is already full.
+ */
+/** Standing surface water above this depth makes the ground read as fully wet. */
+export const AIR_GROUND_WET_SURFACE_DEPTH = 0.15
+/** Relative humidity (0–1) at which a cloud counts as full. */
+export const AIR_FULL_HUMIDITY = 0.999
+/** Per-tick chance a full cloud begins raining over damp ground (no standing surface water). */
+export const AIR_RAIN_RANDOM_CHANCE = 0.03
+/** Per-tick chance when most standing surface water beneath is already at capacity. */
+export const AIR_RAIN_OVER_FULL_SURFACE_CHANCE = 0.0008
+/** Fraction of the humidity-vs-ground-wetness gap (in water units) handed down per tick while raining. */
+export const AIR_PRECIP_GAP_RATE = 0.12
+/** Minimum units shed per tick while a cloud is raining (drains the tail). */
+export const AIR_PRECIP_MIN_UNITS = 0.5
 /** While raining, only this fraction of plant transpiration goes back to air (rest to soil). */
 export const RAIN_TRANSPIRATION_TO_AIR = 0.06
 /** @deprecated Rain goes to surface first; soil is filled by infiltration only. */

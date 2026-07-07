@@ -694,13 +694,15 @@ button:hover {
 
 .canvas-viewport.inspect-creature,
 .canvas-viewport.inspect-plant,
-.canvas-viewport.inspect-soil {
+.canvas-viewport.inspect-soil,
+.canvas-viewport.inspect-air {
   cursor: crosshair;
 }
 
 .canvas-viewport.inspect-creature:active,
 .canvas-viewport.inspect-plant:active,
-.canvas-viewport.inspect-soil:active {
+.canvas-viewport.inspect-soil:active,
+.canvas-viewport.inspect-air:active {
   cursor: grabbing;
 }
 
@@ -1996,8 +1998,8 @@ button:hover {
   .inspect-mode-modes button {
     flex: 1 1 0;
     min-width: 0;
-    padding: 0.35rem 0.3rem;
-    font-size: 0.68rem;
+    padding: 0.35rem 0.25rem;
+    font-size: 0.64rem;
   }
 
   .inspect-mode-bar button.elevation-toggle {

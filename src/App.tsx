@@ -37,6 +37,7 @@ import {
   settingsRunKey,
 } from './sim/simSettings'
 import type { WorldSnapshot } from './sim/types'
+import { AirInspector } from './components/AirInspector'
 import type { InspectMode, MapSelection } from './sim/mapSelection'
 import { selectionMatchesMode } from './sim/mapSelection'
 import { plantKindFromDna } from './sim/plantKinds'
@@ -346,6 +347,19 @@ function App() {
             terrain={snapshot.terrain}
             grass={snapshot.grass}
             woodyPlantCount={selectedSoilWoodyPlantCount}
+            onClose={() => setSelection(null)}
+          />
+        )}
+        {selection?.type === 'air' && snapshot && (
+          <AirInspector
+            col={selection.col}
+            row={selection.row}
+            air={snapshot.air}
+            soil={snapshot.soil}
+            terrain={snapshot.terrain}
+            stats={snapshot.stats}
+            worldWidth={activeSettings.worldWidth}
+            worldHeight={activeSettings.worldHeight}
             onClose={() => setSelection(null)}
           />
         )}

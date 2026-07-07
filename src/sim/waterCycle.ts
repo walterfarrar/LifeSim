@@ -1,11 +1,16 @@
 import {
   AIR_CELL_SIZE,
   AIR_CELL_WATER_CAPACITY,
+  AIR_FULL_HUMIDITY,
+  AIR_GROUND_WET_SURFACE_DEPTH,
+  AIR_PRECIP_GAP_RATE,
+  AIR_PRECIP_MIN_UNITS,
+  AIR_RAIN_OVER_FULL_SURFACE_CHANCE,
+  AIR_RAIN_RANDOM_CHANCE,
   DEATH_WATER_TO_SOIL,
   SURFACE_EVAPORATION_SCALE,
   RAIN_ARM_HUMIDITY,
   RAIN_START_HUMIDITY,
-  RAIN_STOP_HUMIDITY,
   SOIL_CELL_WATER_CAPACITY,
   SOIL_EVAP_BASE,
   SOIL_SATURATED_EVAP_BOOST,
@@ -26,9 +31,6 @@ import { releaseTranspiredWater } from './transpiration'
 export type { AtmospherePool } from './transpiration'
 export type { AirGridSnapshot } from './types'
 
-/** Per-tick fraction of a cloud cell's above-stop vapor that rains out, with a small floor. */
-const AIR_RAIN_FRACTION = 0.28
-const AIR_RAIN_MIN_PRECIP = 0.6
 /** Share of cloud cells that must be actively raining before the world reads as "raining". */
 const AIR_RAIN_GLOBAL_FRACTION = 0.05
 
@@ -56,10 +58,14 @@ export class Atmosphere {
   readonly cols: number
   readonly rows: number
   readonly cellSize: number
+  /** Render cell dimensions — cols·cellW == gridWidth == world, so wraps never overlap. */
+  readonly cellW: number
+  readonly cellH: number
   readonly cellCapacity = AIR_CELL_WATER_CAPACITY
+  readonly gridWidth: number
+  readonly gridHeight: number
   readonly vapor: Float32Array
   private readonly raining: Uint8Array
-  private readonly armed: Uint8Array
   private rainingCount = 0
 
   windDir = 0
@@ -67,23 +73,24 @@ export class Atmosphere {
   offsetX = 0
   offsetY = 0
 
-  private readonly worldWidth: number
-  private readonly worldHeight: number
   private terrain: TerrainWater | null = null
   private soil: SoilMoisture | null = null
   private rng: Rng | null = null
 
   constructor() {
     const bounds = getWorldBounds()
-    this.worldWidth = bounds.width
-    this.worldHeight = bounds.height
     this.cellSize = AIR_CELL_SIZE
     this.cols = Math.max(1, Math.ceil(bounds.width / this.cellSize))
     this.rows = Math.max(1, Math.ceil(bounds.height / this.cellSize))
+    // Grid period is exactly the world; cells are slightly rectangular so they tile it perfectly
+    // with no surplus strip to wrap back onto the first row/column.
+    this.gridWidth = bounds.width
+    this.gridHeight = bounds.height
+    this.cellW = this.gridWidth / this.cols
+    this.cellH = this.gridHeight / this.rows
     const n = this.cols * this.rows
     this.vapor = new Float32Array(n)
     this.raining = new Uint8Array(n)
-    this.armed = new Uint8Array(n).fill(1)
   }
 
   /** Wire the overflow sinks (surface, then soil) and the wind RNG. */
@@ -103,7 +110,6 @@ export class Atmosphere {
   reset(): void {
     this.vapor.fill(0)
     this.raining.fill(0)
-    this.armed.fill(1)
     this.rainingCount = 0
     this.offsetX = 0
     this.offsetY = 0
@@ -151,29 +157,107 @@ export class Atmosphere {
 
   /** Air cell currently sitting over a world position (accounts for wind offset). */
   cellIndexAtWorld(x: number, y: number): number {
-    const ax = wrapFloat(x - this.offsetX, this.worldWidth)
-    const ay = wrapFloat(y - this.offsetY, this.worldHeight)
-    const col = wrapIndex(Math.floor(ax / this.cellSize), this.cols)
-    const row = wrapIndex(Math.floor(ay / this.cellSize), this.rows)
+    const ax = wrapFloat(x - this.offsetX, this.gridWidth)
+    const ay = wrapFloat(y - this.offsetY, this.gridHeight)
+    const col = Math.min(this.cols - 1, Math.max(0, Math.floor(ax / this.cellW)))
+    const row = Math.min(this.rows - 1, Math.max(0, Math.floor(ay / this.cellH)))
     return row * this.cols + col
   }
 
-  /** World center of the ground currently beneath cloud cell `index` (wind-shifted). */
-  private cellWorldCenter(index: number): { x: number; y: number } {
-    const col = index % this.cols
-    const row = Math.floor(index / this.cols)
-    const bx = (col + 0.5) * this.cellSize
-    const by = (row + 0.5) * this.cellSize
-    return {
-      x: wrapFloat(bx + this.offsetX, this.worldWidth),
-      y: wrapFloat(by + this.offsetY, this.worldHeight),
+  /** Soil/terrain cell centers whose footprint lies under this air cell (wind-shifted). */
+  private groundCellsUnder(index: number, soil: SoilMoisture): { x: number; y: number }[] {
+    const acol = index % this.cols
+    const arow = Math.floor(index / this.cols)
+    const baseX = wrapFloat(acol * this.cellW + this.offsetX, this.gridWidth)
+    const baseY = wrapFloat(arow * this.cellH + this.offsetY, this.gridHeight)
+    const spanC = Math.ceil(this.cellW / soil.cellSize) + 1
+    const spanR = Math.ceil(this.cellH / soil.cellSize) + 1
+    const soilColStart = Math.floor(baseX / soil.cellSize)
+    const soilRowStart = Math.floor(baseY / soil.cellSize)
+    const out: { x: number; y: number }[] = []
+
+    for (let dr = 0; dr < spanR; dr++) {
+      for (let dc = 0; dc < spanC; dc++) {
+        const cx = wrapIndex(soilColStart + dc, soil.cols)
+        const cy = wrapIndex(soilRowStart + dr, soil.rows)
+        const x = (cx + 0.5) * soil.cellSize
+        const y = (cy + 0.5) * soil.cellSize
+        if (this.cellIndexAtWorld(x, y) === index) out.push({ x, y })
+      }
     }
+
+    return out
+  }
+
+  private groundWetnessAt(x: number, y: number, terrain: TerrainWater, soil: SoilMoisture): number {
+    const surfaceDepth = terrain.sampleDepth(x, y)
+    return surfaceDepth > AIR_GROUND_WET_SURFACE_DEPTH ? 1 : soil.sample(x, y)
+  }
+
+  private averageWetnessUnder(index: number, terrain: TerrainWater, soil: SoilMoisture): number {
+    const cells = this.groundCellsUnder(index, soil)
+    if (cells.length === 0) return 0
+    let sum = 0
+    for (const { x, y } of cells) sum += this.groundWetnessAt(x, y, terrain, soil)
+    return sum / cells.length
+  }
+
+  /** Share of standing-water tiles beneath this cell that are at surface capacity. */
+  private fractionFullSurfaceUnder(index: number, terrain: TerrainWater, soil: SoilMoisture): number {
+    const cells = this.groundCellsUnder(index, soil)
+    if (cells.length === 0) return 0
+    let standingCount = 0
+    let fullCount = 0
+    for (const { x, y } of cells) {
+      if (terrain.sampleDepth(x, y) <= AIR_GROUND_WET_SURFACE_DEPTH) continue
+      standingCount++
+      if (terrain.surfaceRoomAt(x, y) <= 0.05) fullCount++
+    }
+    if (standingCount === 0) return 0
+    return fullCount / standingCount
+  }
+
+  /** Spread precipitation evenly across all ground tiles beneath an air cell. */
+  private depositPrecipitation(
+    want: number,
+    index: number,
+    terrain: TerrainWater,
+    soil: SoilMoisture,
+    forceOverflow: boolean,
+  ): number {
+    const cells = this.groundCellsUnder(index, soil)
+    if (cells.length === 0 || want <= 0) return 0
+
+    const perCell = want / cells.length
+    let landed = 0
+
+    for (const { x, y } of cells) {
+      let cellLanded = soil.depositWater(x, y, perCell)
+      let leftover = perCell - cellLanded
+      if (leftover > 1e-6) {
+        const room = terrain.surfaceRoomAt(x, y)
+        const toSurface = Math.min(room, leftover)
+        if (toSurface > 1e-6) {
+          terrain.depositSurfaceAt(x, y, toSurface)
+          cellLanded += toSurface
+          leftover -= toSurface
+        }
+      }
+      if (forceOverflow && leftover > 1e-6) {
+        terrain.depositSurfaceAt(x, y, leftover)
+        cellLanded += leftover
+      }
+      landed += cellLanded
+    }
+
+    return landed
   }
 
   /** Deposit vapor into the local cell up to capacity; returns how much was accepted. */
   acceptVaporAt(x: number, y: number, units: number): number {
     if (units <= 0) return 0
     const idx = this.cellIndexAtWorld(x, y)
+    if (this.raining[idx]) return 0
     const room = this.cellCapacity - this.vapor[idx]
     if (room <= 0) return 0
     const accepted = Math.min(room, units)
@@ -225,40 +309,61 @@ export class Atmosphere {
     }
     const vx = Math.cos(this.windDir) * this.windSpeed * dt
     const vy = Math.sin(this.windDir) * this.windSpeed * dt
-    this.offsetX = wrapFloat(this.offsetX + vx, this.worldWidth)
-    this.offsetY = wrapFloat(this.offsetY + vy, this.worldHeight)
+    this.offsetX = wrapFloat(this.offsetX + vx, this.gridWidth)
+    this.offsetY = wrapFloat(this.offsetY + vy, this.gridHeight)
   }
 
-  /** Per-cell local rain: saturated clouds precipitate onto the ground currently beneath them. */
+  /**
+   * Three cloud states per cell:
+   * - **Filling** — vapor below capacity; absorbs from wet ground via evaporation (not raining).
+   * - **Full** — at 100% humidity; holds until over drier ground or a random rain roll.
+   * - **Raining** — latched at full; drains until empty across all ground tiles beneath.
+   */
   tickRain(terrain: TerrainWater, soil: SoilMoisture): void {
     const cap = this.cellCapacity
-    const stopVapor = cap * RAIN_STOP_HUMIDITY
-    const startVapor = cap * RAIN_START_HUMIDITY
-    const armVapor = cap * RAIN_ARM_HUMIDITY
+    const emptyEpsilon = 1e-4
+    const rng = this.rng
     let rainingCount = 0
 
     for (let i = 0; i < this.vapor.length; i++) {
-      if (this.vapor[i] < armVapor) this.armed[i] = 1
-      if (!this.raining[i] && this.armed[i] && this.vapor[i] >= startVapor) {
-        this.raining[i] = 1
-        this.armed[i] = 0
-      }
-      if (!this.raining[i]) continue
-
-      const excess = this.vapor[i] - stopVapor
-      if (excess <= 0) {
+      if (this.vapor[i] <= emptyEpsilon) {
+        this.vapor[i] = 0
         this.raining[i] = 0
         continue
       }
 
-      const precip = Math.min(this.vapor[i], Math.max(AIR_RAIN_MIN_PRECIP, excess * AIR_RAIN_FRACTION))
-      const { x, y } = this.cellWorldCenter(i)
-      let landed = terrain.depositSurfaceAt(x, y, precip)
-      const leftover = precip - landed
-      if (leftover > 0) landed += soil.depositWater(x, y, leftover)
+      const humidity = this.vapor[i] / cap
+      const wetness = this.averageWetnessUnder(i, terrain, soil)
+
+      if (!this.raining[i] && humidity >= AIR_FULL_HUMIDITY) {
+        const overDrierGround = humidity > wetness + 1e-4
+        if (overDrierGround) {
+          this.raining[i] = 1
+        } else if (rng) {
+          const fullSurfaceFrac = this.fractionFullSurfaceUnder(i, terrain, soil)
+          const rainChance =
+            AIR_RAIN_RANDOM_CHANCE +
+            fullSurfaceFrac * (AIR_RAIN_OVER_FULL_SURFACE_CHANCE - AIR_RAIN_RANDOM_CHANCE)
+          if (rng.next() < rainChance) {
+            this.raining[i] = 1
+          }
+        }
+      }
+
+      if (!this.raining[i]) continue
+
+      const gap = humidity - wetness
+      let want =
+        gap > 0
+          ? Math.max(AIR_PRECIP_MIN_UNITS, gap * cap * AIR_PRECIP_GAP_RATE)
+          : AIR_PRECIP_MIN_UNITS
+      want = Math.min(this.vapor[i], want)
+
+      const landed = this.depositPrecipitation(want, i, terrain, soil, true)
       this.vapor[i] -= landed
 
-      if (this.vapor[i] <= stopVapor) {
+      if (this.vapor[i] <= emptyEpsilon) {
+        this.vapor[i] = 0
         this.raining[i] = 0
       } else {
         rainingCount += 1
@@ -273,7 +378,10 @@ export class Atmosphere {
       cols: this.cols,
       rows: this.rows,
       cellSize: this.cellSize,
+      cellW: this.cellW,
+      cellH: this.cellH,
       vapor: this.vapor,
+      raining: this.raining,
       cellCapacity: this.cellCapacity,
       offsetX: this.offsetX,
       offsetY: this.offsetY,
