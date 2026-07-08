@@ -242,6 +242,20 @@ export function SettingsPanel({
                   onChange(patch(draft, { creatureGroupSpawnIntervalYears }))
                 }
               />
+              <label className="settings-field settings-field-checkbox">
+                <span className="settings-label">Evolved brains</span>
+                <span className="settings-hint">
+                  Creatures move via an inheritable neural brain that learns in life and evolves —
+                  they steer around deep water. Off = legacy goal-seeking AI.
+                </span>
+                <input
+                  type="checkbox"
+                  checked={draft.brainControlEnabled}
+                  onChange={(event) =>
+                    onChange(patch(draft, { brainControlEnabled: event.target.checked }))
+                  }
+                />
+              </label>
             </div>
           </details>
 

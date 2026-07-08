@@ -1,5 +1,15 @@
 import { markPendingDeathCause } from '../deathCause'
 import { cloneDNA, crossover, mutate } from '../dna'
+import {
+  cloneBrainDna,
+  createRandomBrainDna,
+  crossoverBrainDna,
+  mutateBrainDna,
+  normalizeBrainDna,
+  type BrainDNA,
+} from '../brain/brainGenome'
+import { createBrainState } from '../brain/network'
+import { consolidateLearnedBrain } from '../brain/learning'
 import { createRandomHerbivoreDNA } from '../herbivoreBudget'
 import { TREE_GRAZE_BITE_SCALE } from '../config'
 import { plantBiteEffectiveness } from '../foraging'
@@ -21,10 +31,16 @@ export function resetCreatureIds(): void {
   nextCreatureId = 1
 }
 
-export function createHerbivore(rng: Rng, position?: Vec2, dna = createRandomHerbivoreDNA(rng)): Creature {
+export function createHerbivore(
+  rng: Rng,
+  position?: Vec2,
+  dna = createRandomHerbivoreDNA(rng),
+  brainDna: BrainDNA = createRandomBrainDna(rng),
+): Creature {
   const bounds = getWorldBounds()
   const margin = Math.min(75, Math.max(40, Math.min(bounds.width, bounds.height) * 0.04))
   const traits = expressCreatureTraits(dna, 0)
+  const normalizedBrain = normalizeBrainDna(brainDna)
   return {
     kind: 'creature',
     id: nextCreatureId++,
@@ -47,6 +63,9 @@ export function createHerbivore(rng: Rng, position?: Vec2, dna = createRandomHer
     ),
     age: 0,
     dna,
+    brainDna: normalizedBrain,
+    brain: createBrainState(normalizedBrain),
+    heading: rng.range(0, Math.PI * 2),
     reproductionCooldown: 0,
     pregnancyTicksRemaining: 0,
     pendingBirthEnergy: 0,
@@ -315,6 +334,7 @@ export function mate(male: Creature, female: Creature): boolean {
 
   female.pregnancyTicksRemaining = traitsFemale.pregnancyTicks
   female.pregnancyPartnerDna = cloneDNA(male.dna)
+  female.pregnancyPartnerBrainDna = cloneBrainDna(male.brainDna)
   female.pendingBirthEnergy = Math.min(traitsFemale.maxEnergy, gift)
   return true
 }
@@ -330,10 +350,14 @@ export function tickPregnancy(creature: Creature, rng: Rng): Creature | null {
     crossover(creature.dna, creature.pregnancyPartnerDna, rng),
     rng,
   )
+  const motherBrain = consolidatedBrainDna(creature)
+  const fatherBrain = creature.pregnancyPartnerBrainDna ?? motherBrain
+  const childBrainDna = mutateBrainDna(crossoverBrainDna(motherBrain, fatherBrain, rng), rng)
   const child = createHerbivore(
     rng,
     { x: creature.x, y: creature.y },
     childDna,
+    childBrainDna,
   )
   child.inbreedingLoad = computeInbreedingLoad(creature.dna, creature.pregnancyPartnerDna, childDna)
   child.energy = creature.pendingBirthEnergy
@@ -348,8 +372,18 @@ export function tickPregnancy(creature: Creature, rng: Rng): Creature | null {
   child.hydration = fromMother
 
   creature.pregnancyPartnerDna = undefined
+  creature.pregnancyPartnerBrainDna = undefined
   creature.pendingBirthEnergy = 0
   return child
+}
+
+/**
+ * The brain genome a creature passes to offspring: its birth genome with a fraction of the weights
+ * it learned during life folded back in (Lamarckian inheritance).
+ */
+function consolidatedBrainDna(creature: Creature): BrainDNA {
+  if (creature.brain) return consolidateLearnedBrain(creature.brainDna, creature.brain)
+  return cloneBrainDna(creature.brainDna)
 }
 
 export function isAlive(creature: Creature): boolean {

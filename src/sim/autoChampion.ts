@@ -5,6 +5,7 @@ import {
   hallChampion,
   loadChampionHall,
   saveChampionHall,
+  clearChampionHall,
   type ChampionHallEntry,
 } from './championHall'
 import { creatureToSavedGenome, type SavedGenome } from './dnaExport'
@@ -72,6 +73,10 @@ export function loadCreatureChampionHall(): AutoChampionRecord[] {
     LEGACY_CHAMPION_KEY,
     parseLegacyCreatureChampion,
   )
+}
+
+export function clearCreatureChampionHall(): void {
+  clearChampionHall(CREATURE_CHAMPION_HALL_KEY, [LEGACY_CHAMPION_KEY])
 }
 
 export function loadAutoChampionRecord(): AutoChampionRecord | null {
@@ -144,10 +149,7 @@ export function tryUpdateAutoChampion(
     },
   )
 
-  const { hall: nextHall, crowned } = crownInHall(hall, candidate, CREATURE_CHAMPION_HALL_MAX)
-  const changed =
-    nextHall.length !== hall.length ||
-    nextHall.some((entry, index) => entry.entryId !== hall[index]?.entryId)
+  const { hall: nextHall, crowned, changed } = crownInHall(hall, candidate, CREATURE_CHAMPION_HALL_MAX)
   if (changed) {
     saveChampionHall(CREATURE_CHAMPION_HALL_KEY, nextHall)
   }

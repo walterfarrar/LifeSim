@@ -1280,6 +1280,36 @@ button:hover {
   padding-top: 0.5rem;
 }
 
+.champion-hall-clear-footer {
+  border-top: 1px solid #1d2a21;
+}
+
+.champion-hall-clear {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+  color: #c47a7a;
+  border-color: #4a2a2a;
+  background: transparent;
+}
+
+.champion-hall-clear:hover {
+  background: #2a1818;
+  border-color: #6a3a3a;
+}
+
+.champion-hall-clear-confirm p {
+  margin: 0 0 0.65rem;
+  color: #a5bba9;
+  font-size: 0.82rem;
+}
+
+.champion-hall-clear-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .settings-hint-block {
   grid-column: 1 / -1;
   margin: 0;

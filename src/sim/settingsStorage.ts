@@ -129,6 +129,7 @@ function sanitizeSettings(raw: Partial<SimSettings>): SimSettings {
       MIN_DAYS_PER_SEASON_YEAR,
       MAX_DAYS_PER_SEASON_YEAR,
     ),
+    brainControlEnabled: raw.brainControlEnabled !== false,
   }
 }
 

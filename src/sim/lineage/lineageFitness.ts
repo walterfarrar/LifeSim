@@ -91,17 +91,20 @@ export type LineageCrownStats = {
 
 /**
  * A lineage must be observed at least this many times before it can be crowned.
- * One snapshot only proves a momentary spike, never that the species survives.
+ * Crowning on the first sighting lets a champion appear quickly (within one check
+ * interval) so respawn/evolution can bootstrap from real DNA instead of random founders.
+ * Sustained lineages still dominate — their score climbs steeply with survival time.
  */
-export const MIN_OBSERVATIONS_TO_CROWN = 2
+export const MIN_OBSERVATIONS_TO_CROWN = 1
 
 /**
  * Crown fitness rewards a lineage that *survives the best*: population and vigor sustained
- * over time, kept self-sustaining by reproduction. A one-frame population spike scores 0,
- * and a momentary peak is only a minor linear tiebreak (never squared).
+ * over time, kept self-sustaining by reproduction. A single-snapshot lineage scores on its
+ * instant vigor and size alone (no longevity bonus yet); a momentary peak is only a minor
+ * linear tiebreak (never squared), so it is easily overtaken once a lineage proves it lasts.
  */
 export function lineageCrownFitness(stats: LineageCrownStats): number {
-  if (stats.observationCount < MIN_OBSERVATIONS_TO_CROWN || stats.spanTicks <= 0) {
+  if (stats.observationCount < MIN_OBSERVATIONS_TO_CROWN || stats.spanTicks < 0) {
     return 0
   }
 

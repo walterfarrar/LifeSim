@@ -4,6 +4,7 @@ import {
   hallChampion,
   loadChampionHall,
   saveChampionHall,
+  clearChampionHall,
   type ChampionHallEntry,
 } from './championHall'
 import type { Pathogen } from './disease/pathogen'
@@ -57,6 +58,10 @@ function parsePathogenChampionEntry(raw: unknown): AutoPathogenChampionRecord | 
 
 export function loadPathogenChampionHall(): AutoPathogenChampionRecord[] {
   return loadChampionHall(PATHOGEN_CHAMPION_HALL_KEY, parsePathogenChampionEntry)
+}
+
+export function clearPathogenChampionHall(): void {
+  clearChampionHall(PATHOGEN_CHAMPION_HALL_KEY)
 }
 
 export function loadAutoPathogenChampionRecord(): AutoPathogenChampionRecord | null {
@@ -131,10 +136,7 @@ export function tryUpdateAutoPathogenChampion(
     },
   )
 
-  const { hall: nextHall, crowned } = crownInHall(hall, candidate)
-  const changed =
-    nextHall.length !== hall.length ||
-    nextHall.some((entry, index) => entry.entryId !== hall[index]?.entryId)
+  const { hall: nextHall, crowned, changed } = crownInHall(hall, candidate)
   if (changed) {
     saveChampionHall(PATHOGEN_CHAMPION_HALL_KEY, nextHall)
   }

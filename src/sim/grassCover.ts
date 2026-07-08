@@ -165,6 +165,15 @@ export class GrassCover {
     return this.energy[index] > GRASS_EDIBLE_ENERGY && this.dnaByCell[index] !== null
   }
 
+  /**
+   * Turf substantial enough to hold the tile against new seeds. Trace turf
+   * dying back below the edible threshold no longer blocks reseeding — it can be
+   * reclaimed by a fresh seed (its residual water is released first).
+   */
+  occupiesTile(index: number): boolean {
+    return this.isEdibleGrass(index)
+  }
+
   /** @deprecated Prefer isLiveTurf / isEdibleGrass */
   hasGrass(index: number): boolean {
     return this.isLiveTurf(index)
@@ -173,7 +182,7 @@ export class GrassCover {
   countEdible(): number {
     let n = 0
     for (let i = 0; i < this.energy.length; i++) {
-      if (this.isLiveTurf(i)) n += 1
+      if (this.isEdibleGrass(i)) n += 1
     }
     return n
   }
@@ -241,7 +250,7 @@ export class GrassCover {
       const x = rng.range(margin, bounds.width - margin)
       const y = rng.range(margin, bounds.height - margin)
       const idx = this.cellIndex(x, y)
-      if (this.hasGrass(idx)) continue
+      if (this.occupiesTile(idx)) continue
       const dna =
         i === 0 && championDna
           ? cloneDNA(championDna)
@@ -649,7 +658,9 @@ export class GrassCover {
 
       const neighborIdx = this.pickNeighborIndex(rng, parentIdx)
       if (neighborIdx < 0) continue
-      if (this.hasGrass(neighborIdx)) continue
+      if (this.occupiesTile(neighborIdx)) continue
+      // Trace turf dying back can be reclaimed — return its residual water first.
+      if (this.dnaByCell[neighborIdx]) this.releaseDeadWater(neighborIdx, soil, atmosphere)
 
       const childDna = finalizePlantDna(mutatePlant(cloneDNA(parentDna), rng))
       this.energy[parentIdx] -= seedCost
@@ -726,6 +737,7 @@ export class GrassCover {
       rng.range(0, bounds.width),
       rng.range(0, bounds.height),
     )
+    if (this.dnaByCell[idx]) this.releaseDeadWater(idx, soil, atmosphere)
     this.seedCell(idx, createPlantKindDna(GRASS_KIND, rng), rng)
     this.fundStructuralWaterFromSoil(idx, soil, atmosphere)
     return true

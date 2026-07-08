@@ -30,6 +30,7 @@ import {
   capHydration,
   createHerbivore,
   creatureTraits,
+  hungryExitLine,
   isAlive,
   mate,
   mateProximity,
@@ -38,11 +39,19 @@ import {
   needsFood,
   needsWater,
   resetCreatureIds,
+  thirstyExitLine,
   tickPregnancy,
   toroidalDistance,
+  tryAttackCreature,
   tryEatPlant,
   updateMode,
 } from './entities/creature'
+import { brainForward } from './brain/network'
+import { packBrainInputs, type BrainSenseReadings, type SenseTarget } from './brain/senses'
+import { cloneBrainDna, type BrainDNA } from './brain/brainGenome'
+import { createSeedBrainDna } from './brain/brainSeed'
+import { beginBrainTick, learnFromOutcome } from './brain/learning'
+import { toroidalDelta } from './toroidal'
 import {
   biteCorpse,
   createCorpseFromCreature,
@@ -125,6 +134,7 @@ import {
 } from './energyEconomy'
 import type { PlantKind } from './plantKinds'
 import {
+  DROWN_DEPTH_BODY_SIZE_MULT,
   PLANT_EXTINCT_WIND_RESEED_CHANCE,
   PLANT_KIND_EXTINCT_RESEED_CHANCE,
   PLANT_WATER_PER_ENERGY,
@@ -213,6 +223,8 @@ export class World {
     temperature: 20,
   }
   private primaryProductionThisTick = 0
+  /** When set, every founder spawns with this exact brain genome (used by the evolution harness). */
+  private founderBrainDna: BrainDNA | null = null
   /** Broad-phase neighbor index for the current tick. */
   private grid: CreatureGrid = new CreatureGrid([])
   /** Edible plants for the current tick — hoisted so we filter once, not per creature. */
@@ -408,6 +420,7 @@ export class World {
     this.spawnPlants()
     this.runCreatureBehavior()
     this.applySurfaceDrowning()
+    if (this.settings.brainControlEnabled) this.tickBrainLearning()
     tickDiseaseSystem(this.creatures, this.pathogens, this.rng, this.stats.tick, this.settings)
     this.cullDead()
     this.tickCreatureSpawning()
@@ -426,6 +439,11 @@ export class World {
       pathogens: this.pathogens,
       stats: { ...this.stats },
     }
+  }
+
+  /** Force all founders to spawn with a specific brain genome (evolution harness); null = seed. */
+  setFounderBrainDna(brain: BrainDNA | null): void {
+    this.founderBrainDna = brain ? cloneBrainDna(brain) : null
   }
 
   get width(): number {
@@ -467,11 +485,15 @@ export class World {
       groupFounderDna,
       this.creatureSexIndexOffset,
     )) {
+      const brainDna = this.founderBrainDna
+        ? cloneBrainDna(this.founderBrainDna)
+        : createSeedBrainDna(this.rng)
       spawned.push(
         createHerbivore(
           this.rng,
           this.resolveCreatureSpawnPosition(spawn),
           spawn.dna,
+          brainDna,
         ),
       )
     }
@@ -607,14 +629,29 @@ export class World {
     this.grid = new CreatureGrid(this.creatures)
     this.ediblePlants = this.plants.filter(isPlantEdible)
 
+    const brainControl = this.settings.brainControlEnabled
+
     for (const creature of this.creatures) {
       decayCreatureMemories(creature, creatureTraits(creature))
+      if (brainControl && creature.brain) {
+        beginBrainTick(creature.brain, creature.energy + creature.hydration)
+      }
     }
 
     for (const creature of this.creatures) {
       updateMode(creature)
       const traits = creatureTraits(creature)
       const spaceNeighbors = this.grid.collect(creature.x, creature.y, traits.personalSpace)
+
+      if (brainControl && creature.brain) {
+        this.driveWithBrain(creature, traits, spaceNeighbors)
+        // The evolved brain owns navigation; combat stays a reflex for aggressive creatures.
+        const reaction = evaluateSpaceReaction(creature, spaceNeighbors)
+        if (reaction.kind === 'attack') tryAttackCreature(creature, reaction.intruder)
+        applyMovement(creature)
+        continue
+      }
+
       const spaceReaction = evaluateSpaceReaction(creature, spaceNeighbors)
       const handledSpace = applySpaceReaction(creature, spaceReaction)
 
@@ -1138,6 +1175,15 @@ export class World {
     return this.pickWanderGoal(creature)
   }
 
+  /** Reward-modulated lifetime learning: each brain adapts from this tick's wellbeing change. */
+  private tickBrainLearning(): void {
+    for (const creature of this.creatures) {
+      if (creature.brain) {
+        learnFromOutcome(creature.brain, creature.energy + creature.hydration)
+      }
+    }
+  }
+
   private applySurfaceDrowning(): void {
     if (!isPondDrinkable(this.terrain)) return
     for (const creature of this.creatures) {
@@ -1172,6 +1218,133 @@ export class World {
       case 'sleepy':
         return this.pickWanderGoal(creature)
     }
+  }
+
+  /** Evolved-brain movement: senses → neural net → egocentric steering → velocity. */
+  private driveWithBrain(
+    creature: Creature,
+    traits: ReturnType<typeof creatureTraits>,
+    spaceNeighbors: readonly Creature[],
+  ): void {
+    if (!creature.brain) return
+    const readings = this.computeBrainReadings(creature, traits, spaceNeighbors)
+    const inputs = packBrainInputs(readings)
+    const out = brainForward(creature.brain, inputs)
+
+    const cos = Math.cos(creature.heading)
+    const sin = Math.sin(creature.heading)
+    let dirX = out.forward * cos - out.right * sin
+    let dirY = out.forward * sin + out.right * cos
+    const mag = Math.hypot(dirX, dirY)
+
+    let speed = traits.speed * out.throttle
+    if (creature.mode === 'sleepy') speed *= traits.sleepMobility
+
+    if (mag < 1e-4 || speed < 1e-4) {
+      creature.vx = 0
+      creature.vy = 0
+      return
+    }
+
+    dirX /= mag
+    dirY /= mag
+    creature.vx = dirX * speed
+    creature.vy = dirY * speed
+    creature.heading = Math.atan2(dirY, dirX)
+  }
+
+  private computeBrainReadings(
+    creature: Creature,
+    traits: ReturnType<typeof creatureTraits>,
+    spaceNeighbors: readonly Creature[],
+  ): BrainSenseReadings {
+    const vision = traits.vision
+    const bodySize = Math.max(1, traits.radius * DROWN_DEPTH_BODY_SIZE_MULT)
+    const probe = traits.radius + 6 + traits.speed * 4
+
+    const ahead = this.probePoint(creature, creature.heading, probe)
+    const left = this.probePoint(creature, creature.heading - BRAIN_PROBE_SPREAD, probe)
+    const right = this.probePoint(creature, creature.heading + BRAIN_PROBE_SPREAD, probe)
+
+    const heightHere = this.terrain.sampleHeight(creature.x, creature.y)
+    const heightAhead = this.terrain.sampleHeight(ahead.x, ahead.y)
+
+    const hungerExit = hungryExitLine(creature)
+    const thirstExit = thirstyExitLine(creature)
+
+    const food = this.findBestPlantFood(creature, vision)
+    const water = this.nearestWaterPoint(creature, traits, vision)
+    const mate = canSeekMate(creature) ? this.nearestMatePoint(creature, vision) : null
+    const crowder = nearestCrowder(creature, spaceNeighbors)
+
+    return {
+      heading: creature.heading,
+      hungerNeed: clamp01((hungerExit - creature.energy) / Math.max(hungerExit, 1)),
+      thirstNeed: clamp01((thirstExit - creature.hydration) / Math.max(thirstExit, 1)),
+      fatigueNeed: clamp01(creature.fatigue / Math.max(traits.sleepFatigueThreshold, 1)),
+      reproReady: mate !== null || canSeekMate(creature) ? 1 : 0,
+      depthHere: this.terrain.wadingDepth(creature.x, creature.y) / bodySize,
+      depthAhead: this.terrain.wadingDepth(ahead.x, ahead.y) / bodySize,
+      depthLeft: this.terrain.wadingDepth(left.x, left.y) / bodySize,
+      depthRight: this.terrain.wadingDepth(right.x, right.y) / bodySize,
+      slopeAhead: clamp((heightAhead - heightHere) / BRAIN_SLOPE_NORM, -1, 1),
+      food: this.targetReading(creature, food, vision),
+      water: this.targetReading(creature, water, vision),
+      mate: this.targetReading(creature, mate, vision),
+      crowder: crowder ? this.targetReading(creature, crowder, traits.personalSpace) : null,
+    }
+  }
+
+  private probePoint(creature: Creature, heading: number, dist: number): Vec2 {
+    return { x: creature.x + Math.cos(heading) * dist, y: creature.y + Math.sin(heading) * dist }
+  }
+
+  private targetReading(creature: Creature, target: Vec2 | null, range: number): SenseTarget {
+    if (!target) return null
+    const { dx, dy } = toroidalDelta(creature, target)
+    const dist = Math.hypot(dx, dy)
+    return { dx, dy, close: clamp01(1 - dist / Math.max(range, 1)) }
+  }
+
+  private nearestWaterPoint(
+    creature: Creature,
+    traits: ReturnType<typeof creatureTraits>,
+    range: number,
+  ): Vec2 | null {
+    let best: Vec2 | null = null
+    let bestDist = Infinity
+    const consider = (point: Vec2 | null) => {
+      if (!point) return
+      const d = toroidalDistance(creature, point)
+      if (d < bestDist) {
+        bestDist = d
+        best = { x: point.x, y: point.y }
+      }
+    }
+
+    if (traits.pondDrinking > 0.05) {
+      consider(this.terrain.findBestSurfaceTarget(creature.x, creature.y, range))
+    }
+    consider(findBestPlantWaterTarget(creature, this.ediblePlants, range))
+    const grassIdx = findBestGrassWaterTarget(creature, this.grass, range)
+    if (grassIdx !== null) consider(this.grass.cellCenter(grassIdx))
+
+    return best
+  }
+
+  private nearestMatePoint(creature: Creature, range: number): Vec2 | null {
+    const candidates = this.grid.collect(creature.x, creature.y, range)
+    let best: Creature | null = null
+    let bestDist = Infinity
+    for (const other of candidates) {
+      if (!isMateSearchTarget(creature, other)) continue
+      const d = toroidalDistance(creature, other)
+      if (d < bestDist) {
+        bestDist = d
+        best = other
+      }
+    }
+    return best ? { x: best.x, y: best.y } : null
   }
 
   private pickWanderGoal(creature: Creature): { x: number; y: number } {
@@ -1288,6 +1461,29 @@ export class World {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+function clamp01(value: number): number {
+  return value < 0 ? 0 : value > 1 ? 1 : value
+}
+
+/** Angular offset (radians) of the left/right water-depth probes from straight ahead. */
+const BRAIN_PROBE_SPREAD = 0.7
+/** Elevation delta (probe-ahead minus here) that maps to a full ±1 slope sense. */
+const BRAIN_SLOPE_NORM = 2.5
+
+function nearestCrowder(creature: Creature, neighbors: readonly Creature[]): Vec2 | null {
+  let best: Creature | null = null
+  let bestDist = Infinity
+  for (const other of neighbors) {
+    if (other.id === creature.id) continue
+    const d = toroidalDistance(creature, other)
+    if (d < bestDist) {
+      bestDist = d
+      best = other
+    }
+  }
+  return best ? { x: best.x, y: best.y } : null
 }
 
 /**

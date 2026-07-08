@@ -4,6 +4,7 @@ import {
   hallChampion,
   loadChampionHall,
   saveChampionHall,
+  clearChampionHall,
   type ChampionHallEntry,
 } from './championHall'
 import { PlantSpeciesTracker } from './plantLineage/plantSpeciesTracker'
@@ -71,6 +72,10 @@ export function loadPlantChampionHall(): AutoPlantChampionRecord[] {
     LEGACY_PLANT_CHAMPION_KEY,
     parseLegacyPlantChampion,
   )
+}
+
+export function clearPlantChampionHall(): void {
+  clearChampionHall(PLANT_CHAMPION_HALL_KEY, [LEGACY_PLANT_CHAMPION_KEY])
 }
 
 export function loadAutoPlantChampionRecord(): AutoPlantChampionRecord | null {
@@ -144,10 +149,7 @@ export function tryUpdateAutoPlantChampion(
     },
   )
 
-  const { hall: nextHall, crowned } = crownInHall(hall, candidate)
-  const changed =
-    nextHall.length !== hall.length ||
-    nextHall.some((entry, index) => entry.entryId !== hall[index]?.entryId)
+  const { hall: nextHall, crowned, changed } = crownInHall(hall, candidate)
   if (changed) {
     saveChampionHall(PLANT_CHAMPION_HALL_KEY, nextHall)
   }

@@ -55,6 +55,8 @@ export type SimSettings = {
   dayLengthSeconds: number
   /** How many day–night cycles make one season year. */
   daysPerSeasonYear: number
+  /** When true, an evolved neural brain drives creature movement; false = legacy goal-seeking AI. */
+  brainControlEnabled: boolean
 }
 
 export type FounderSettings = Pick<
@@ -84,6 +86,7 @@ export const DEFAULT_SIM_SETTINGS: SimSettings = {
   totalWater: scaledDefaultTotalWater(DEFAULT_WORLD_WIDTH, DEFAULT_WORLD_HEIGHT),
   dayLengthSeconds: DAY_LENGTH_SECONDS,
   daysPerSeasonYear: DAYS_PER_SEASON_YEAR,
+  brainControlEnabled: true,
 }
 
 export function totalStartingHerbivores(settings: SimSettings): number {

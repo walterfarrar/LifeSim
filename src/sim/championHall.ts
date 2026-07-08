@@ -9,12 +9,25 @@ export type ChampionHallEntry = {
   savedAt: string
 }
 
+/** True when the ranking, membership, or any entry's score differs — i.e. worth persisting. */
+function hallChanged<T extends ChampionHallEntry>(
+  before: readonly T[],
+  after: readonly T[],
+): boolean {
+  if (before.length !== after.length) return true
+  for (let i = 0; i < after.length; i++) {
+    if (after[i].entryId !== before[i].entryId) return true
+    if (after[i].fitnessScore !== before[i].fitnessScore) return true
+  }
+  return false
+}
+
 /** Insert into the hall when reigning is beaten, or when the candidate qualifies for the top N. */
 export function crownInHall<T extends ChampionHallEntry>(
   hall: readonly T[],
   candidate: T,
   maxEntries: number = CHAMPION_HALL_MAX,
-): { hall: T[]; crowned: boolean } {
+): { hall: T[]; crowned: boolean; changed: boolean } {
   const reigning = hall[0] ?? null
   const existing = hall.find((entry) => entry.entryId === candidate.entryId) ?? null
 
@@ -29,11 +42,11 @@ export function crownInHall<T extends ChampionHallEntry>(
   const madeHall = next.some((entry) => entry.entryId === kept.entryId)
 
   if (!madeHall) {
-    return { hall: [...hall], crowned: false }
+    return { hall: [...hall], crowned: false, changed: false }
   }
 
   const beatReigning = improved && (!reigning || kept.fitnessScore > reigning.fitnessScore)
-  return { hall: next, crowned: beatReigning }
+  return { hall: next, crowned: beatReigning, changed: hallChanged(hall, next) }
 }
 
 export function loadChampionHall<T extends ChampionHallEntry>(
@@ -74,6 +87,17 @@ export function saveChampionHall<T>(storageKey: string, hall: readonly T[]): voi
     localStorage.setItem(storageKey, JSON.stringify(hall))
   } catch {
     // ignore quota / private mode errors
+  }
+}
+
+export function clearChampionHall(storageKey: string, legacyKeys: readonly string[] = []): void {
+  try {
+    localStorage.removeItem(storageKey)
+    for (const key of legacyKeys) {
+      localStorage.removeItem(key)
+    }
+  } catch {
+    // ignore private mode errors
   }
 }
 

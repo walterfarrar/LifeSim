@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  clearCreatureChampionHall,
   loadCreatureChampionHall,
   type AutoChampionRecord,
 } from '../sim/autoChampion'
@@ -12,10 +13,12 @@ import { geneArrayToPathogenDna } from '../sim/pathogenDnaExport'
 import { expressPathogen } from '../sim/disease/pathogen'
 import { PATHOGEN_GENE_LABELS, PLANT_GENE_LABELS } from '../sim/geneLabels'
 import {
+  clearPlantChampionHall,
   loadPlantChampionHall,
   type AutoPlantChampionRecord,
 } from '../sim/plantAutoChampion'
 import {
+  clearPathogenChampionHall,
   loadPathogenChampionHall,
   type AutoPathogenChampionRecord,
 } from '../sim/pathogenAutoChampion'
@@ -30,6 +33,7 @@ type HallTab = 'creatures' | 'plants' | 'diseases'
 type ChampionHallModalProps = {
   open: boolean
   onClose: () => void
+  onHallCleared?: () => void
 }
 
 function fmt(value: number, digits = 1): string {
@@ -55,13 +59,14 @@ function formatSavedAt(iso: string): string {
   return date.toLocaleString()
 }
 
-export function ChampionHallModal({ open, onClose }: ChampionHallModalProps) {
+export function ChampionHallModal({ open, onClose, onHallCleared }: ChampionHallModalProps) {
   const [tab, setTab] = useState<HallTab>('creatures')
   const [creatureHall, setCreatureHall] = useState<AutoChampionRecord[]>([])
   const [plantHall, setPlantHall] = useState<AutoPlantChampionRecord[]>([])
   const [pathogenHall, setPathogenHall] = useState<AutoPathogenChampionRecord[]>([])
   const [selectedRank, setSelectedRank] = useState(0)
   const [message, setMessage] = useState<string | null>(null)
+  const [confirmClear, setConfirmClear] = useState(false)
 
   const flash = (text: string) => {
     setMessage(text)
@@ -75,6 +80,7 @@ export function ChampionHallModal({ open, onClose }: ChampionHallModalProps) {
     setPathogenHall(loadPathogenChampionHall())
     setSelectedRank(0)
     setMessage(null)
+    setConfirmClear(false)
   }, [open])
 
   useEffect(() => {
@@ -142,6 +148,19 @@ export function ChampionHallModal({ open, onClose }: ChampionHallModalProps) {
     })
     saveToGenomeLibrary(saved)
     flash(`Saved “${saved.name}” to your library`)
+  }
+
+  const handleClearHall = () => {
+    clearCreatureChampionHall()
+    clearPlantChampionHall()
+    clearPathogenChampionHall()
+    setCreatureHall([])
+    setPlantHall([])
+    setPathogenHall([])
+    setSelectedRank(0)
+    setConfirmClear(false)
+    flash('Hall of fame cleared')
+    onHallCleared?.()
   }
 
   if (!open) return null
@@ -313,6 +332,32 @@ export function ChampionHallModal({ open, onClose }: ChampionHallModalProps) {
         {message && (
           <footer className="settings-modal-footer champion-hall-footer">
             <p className="dna-save-message">{message}</p>
+          </footer>
+        )}
+
+        {hasAnyHall && (
+          <footer className="settings-modal-footer champion-hall-footer champion-hall-clear-footer">
+            {confirmClear ? (
+              <div className="champion-hall-clear-confirm">
+                <p>Clear all creature, plant, and disease champions? This cannot be undone.</p>
+                <div className="champion-hall-clear-actions">
+                  <button type="button" className="settings-primary" onClick={handleClearHall}>
+                    Yes, clear hall
+                  </button>
+                  <button type="button" onClick={() => setConfirmClear(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="champion-hall-clear"
+                onClick={() => setConfirmClear(true)}
+              >
+                Clear hall of fame
+              </button>
+            )}
           </footer>
         )}
       </div>

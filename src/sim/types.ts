@@ -1,3 +1,5 @@
+import type { BrainDNA } from './brain/brainGenome'
+import type { BrainState } from './brain/network'
 import type { CreatureMemory } from './creatureMemory'
 import type { CreatureDeathCause } from './deathCause'
 import type { DNA } from './dna'
@@ -67,10 +69,18 @@ export interface Creature {
   hydration: number
   age: number
   dna: DNA
+  /** Behavior genome — a second DNA string wiring the movement neural net. Inherited and mutated. */
+  brainDna: BrainDNA
+  /** Live neural state decoded from brainDna; drifts during life (learning), not inherited directly. */
+  brain?: BrainState
+  /** Facing angle (radians); forward unit is (cos, sin). Updated as the creature moves. */
+  heading: number
   reproductionCooldown: number
   /** Ticks until birth; 0 when not pregnant. */
   pregnancyTicksRemaining: number
   pregnancyPartnerDna?: DNA
+  /** Father's behavior genome, captured at mating for the child's inheritance. */
+  pregnancyPartnerBrainDna?: BrainDNA
   pendingBirthEnergy: number
   wanderX: number
   wanderY: number

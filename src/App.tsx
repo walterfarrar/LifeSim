@@ -77,6 +77,20 @@ function App() {
   const lineageTrackerRef = useRef(new LineageTracker())
   const plantSpeciesTrackerRef = useRef(new PlantSpeciesTracker())
   const pathogenStrainTrackerRef = useRef(new PathogenStrainTracker())
+  const lastChampionCheckRef = useRef(-1)
+
+  const handleHallCleared = useCallback(() => {
+    // Wipe the live trackers too, otherwise still-alive lineages get re-crowned
+    // instantly with their full pre-clear history. Reset the check cursor so the
+    // fresh competition starts sampling from scratch.
+    lineageTrackerRef.current.reset()
+    plantSpeciesTrackerRef.current.reset()
+    pathogenStrainTrackerRef.current.reset()
+    lastChampionCheckRef.current = -1
+    setAutoChampion(null)
+    setAutoPlantChampion(null)
+    setAutoPathogenChampion(null)
+  }, [])
 
   const onSnapshot = useCallback((next: WorldSnapshot) => {
     setSnapshot(next)
@@ -123,6 +137,7 @@ function App() {
     lineageTrackerRef.current.reset()
     plantSpeciesTrackerRef.current.reset()
     pathogenStrainTrackerRef.current.reset()
+    lastChampionCheckRef.current = -1
     setAutoChampion(loadAutoChampionRecord())
     setAutoPlantChampion(loadAutoPlantChampionRecord())
     setAutoPathogenChampion(loadAutoPathogenChampionRecord())
@@ -130,7 +145,12 @@ function App() {
 
   useEffect(() => {
     if (!snapshot || paused) return
-    if (snapshot.stats.tick % AUTO_CHAMPION_CHECK_INTERVAL !== 0) return
+    // The sim advances several ticks per animation frame, so the reported tick rarely
+    // lands exactly on a multiple of the interval. Fire whenever a new interval boundary
+    // is crossed instead of requiring exact divisibility (which silently skipped checks).
+    const checkBoundary = Math.floor(snapshot.stats.tick / AUTO_CHAMPION_CHECK_INTERVAL)
+    if (checkBoundary === lastChampionCheckRef.current) return
+    lastChampionCheckRef.current = checkBoundary
 
     if (snapshot.stats.herbivoreCount > 0) {
       const { champion } = tryUpdateAutoChampion(
@@ -433,7 +453,11 @@ function App() {
           }}
         />
       </div>
-      <ChampionHallModal open={hallOpen} onClose={() => setHallOpen(false)} />
+      <ChampionHallModal
+        open={hallOpen}
+        onClose={() => setHallOpen(false)}
+        onHallCleared={handleHallCleared}
+      />
       <CreatureEditorModal
         open={editorOpen}
         initialGenome={editorGenome}
