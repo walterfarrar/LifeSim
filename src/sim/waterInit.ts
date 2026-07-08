@@ -67,28 +67,35 @@ function nearestSurfaceWater(creature: Creature, terrain: TerrainWater): { x: nu
   return target ? { x: target.x, y: target.y } : null
 }
 
-/** Fund spawn hydration from air, then nearest standing water. */
+/**
+ * Fund spawn hydration by drawing real water from the pools: nearest standing water first
+ * (creatures drink from ponds), then the local air and soil. A creature can only carry away what
+ * the pools could actually supply — no water is minted. If the world is too dry to fund a spawn,
+ * the newcomer simply arrives thirsty rather than inflating the total water budget.
+ */
 export function fundInitialCreatureHydration(
   creatures: readonly Creature[],
   terrain: TerrainWater,
   atmosphere: Atmosphere,
+  soil: SoilAccess,
 ): void {
   for (const creature of creatures) {
     const target = creature.hydration
+    if (target <= 0) {
+      creature.hydration = 0
+      continue
+    }
     let funded = 0
 
-    funded += atmosphere.drawFrom(creature.x, creature.y, target - funded)
-
+    const waterCell = nearestSurfaceWater(creature, terrain)
+    if (waterCell) {
+      funded += terrain.consumeAt(waterCell.x, waterCell.y, target - funded)
+    }
     if (funded < target) {
-      const waterCell = nearestSurfaceWater(creature, terrain)
-      if (waterCell) {
-        const stillNeed = target - funded
-        const fromSurface = terrain.consumeAt(waterCell.x, waterCell.y, stillNeed)
-        funded += fromSurface
-      }
+      funded += pullWaterFromPools(creature.x, creature.y, target - funded, soil, atmosphere)
     }
 
-    creature.hydration = funded > 0 ? Math.min(target, funded) : target
+    creature.hydration = Math.min(target, funded)
   }
 }
 

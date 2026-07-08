@@ -505,7 +505,7 @@ export class World {
   private introduceCreatureGroup(groupIndex: number): void {
     const newcomers = this.spawnCreatureGroup(groupIndex)
     if (newcomers.length === 0) return
-    fundInitialCreatureHydration(newcomers, this.terrain, this.atmosphere)
+    fundInitialCreatureHydration(newcomers, this.terrain, this.atmosphere, this.soil)
     this.creatures.push(...newcomers)
   }
 
