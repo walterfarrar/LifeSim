@@ -140,6 +140,7 @@ import {
   PLANT_WATER_PER_ENERGY,
   SOIL_CELL_SIZE,
   SOIL_REPRO_MIN_MOISTURE,
+  TERRAIN_ELEVATION_MAX,
 } from './config'
 import { classifyDeathCause, createEmptyDeathCauseCounts } from './deathCause'
 import {
@@ -1268,6 +1269,9 @@ export class World {
 
     const heightHere = this.terrain.sampleHeight(creature.x, creature.y)
     const heightAhead = this.terrain.sampleHeight(ahead.x, ahead.y)
+    const heightLeft = this.terrain.sampleHeight(left.x, left.y)
+    const heightRight = this.terrain.sampleHeight(right.x, right.y)
+    const seasonAngle = this.stats.seasonPhase * Math.PI * 2
 
     const hungerExit = hungryExitLine(creature)
     const thirstExit = thirstyExitLine(creature)
@@ -1288,6 +1292,14 @@ export class World {
       depthLeft: this.terrain.wadingDepth(left.x, left.y) / bodySize,
       depthRight: this.terrain.wadingDepth(right.x, right.y) / bodySize,
       slopeAhead: clamp((heightAhead - heightHere) / BRAIN_SLOPE_NORM, -1, 1),
+      elevationHere: clamp01(heightHere / TERRAIN_ELEVATION_MAX),
+      slopeLeft: clamp((heightLeft - heightHere) / BRAIN_SLOPE_NORM, -1, 1),
+      slopeRight: clamp((heightRight - heightHere) / BRAIN_SLOPE_NORM, -1, 1),
+      soilWaterHere: this.soil.sample(creature.x, creature.y),
+      temperature: clamp((this.stats.temperature - BRAIN_TEMP_MID) / BRAIN_TEMP_SCALE, -1, 1),
+      seasonSin: Math.sin(seasonAngle),
+      seasonCos: Math.cos(seasonAngle),
+      daylight: this.stats.sunlight,
       food: this.targetReading(creature, food, vision),
       water: this.targetReading(creature, water, vision),
       mate: this.targetReading(creature, mate, vision),
@@ -1471,6 +1483,9 @@ function clamp01(value: number): number {
 const BRAIN_PROBE_SPREAD = 0.7
 /** Elevation delta (probe-ahead minus here) that maps to a full ±1 slope sense. */
 const BRAIN_SLOPE_NORM = 2.5
+/** Temperature (°C) mapped to the −1..1 sense: midpoint reads 0, ±BRAIN_TEMP_SCALE saturates. */
+const BRAIN_TEMP_MID = 15
+const BRAIN_TEMP_SCALE = 25
 
 function nearestCrowder(creature: Creature, neighbors: readonly Creature[]): Vec2 | null {
   let best: Creature | null = null

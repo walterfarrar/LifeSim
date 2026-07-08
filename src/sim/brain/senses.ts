@@ -27,6 +27,21 @@ export type BrainSenseReadings = {
   depthRight: number
   /** −1 = steep downhill ahead, +1 = steep uphill ahead. */
   slopeAhead: number
+  /** Absolute ground height under the creature, 0 = lowest terrain, 1 = highest. */
+  elevationHere: number
+  /** −1 = downhill to the left, +1 = uphill to the left. */
+  slopeLeft: number
+  /** −1 = downhill to the right, +1 = uphill to the right. */
+  slopeRight: number
+  /** Soil moisture under the creature, 0 = parched, 1 = saturated. */
+  soilWaterHere: number
+  /** Ambient temperature, normalized so −1 = cold, 0 = mild, +1 = hot. */
+  temperature: number
+  /** Cyclic season encoding (sin/cos of the yearly phase) so spring ≠ autumn. */
+  seasonSin: number
+  seasonCos: number
+  /** Daylight level, 0 = night, 1 = midday sun. */
+  daylight: number
   food: SenseTarget
   water: SenseTarget
   mate: SenseTarget
@@ -84,5 +99,13 @@ export function packBrainInputs(r: BrainSenseReadings, out?: Float32Array): Floa
   inputs[17] = mate.r
   inputs[18] = crowder.f
   inputs[19] = crowder.r
+  inputs[20] = center01(r.elevationHere)
+  inputs[21] = clamp(r.slopeLeft, -1, 1)
+  inputs[22] = clamp(r.slopeRight, -1, 1)
+  inputs[23] = center01(r.soilWaterHere)
+  inputs[24] = clamp(r.temperature, -1, 1)
+  inputs[25] = clamp(r.seasonSin, -1, 1)
+  inputs[26] = clamp(r.seasonCos, -1, 1)
+  inputs[27] = center01(r.daylight)
   return inputs
 }

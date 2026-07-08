@@ -1,4 +1,4 @@
-import { normalizeBrainDna, type BrainDNA } from './brainGenome'
+import { adaptBakedBrainSeed, type BrainDNA } from './brainGenome'
 import type { Rng } from '../rng'
 
 /**
@@ -6,7 +6,10 @@ import type { Rng } from '../rng'
  * baked in here so the live sim starts with creatures that already forage and avoid deep water,
  * instead of flailing randomly. Regenerate by re-running the harness; it overwrites this array.
  *
- * Last harness score: 5.8 (length 189, expected 189).
+ * Last harness score: 5.8 (length 189, evolved under 20 inputs). The live network now has more
+ * inputs; {@link adaptBakedBrainSeed} migrates this array into the current layout at load time,
+ * preserving the evolved wiring and starting the new senses neutral. Re-run the harness to bake a
+ * fresh seed that also uses the new senses from birth.
  */
 export const SEED_BRAIN_DNA: readonly number[] = [
   93, 134, 85, 216, 238, 203, 131, 138, 206, 130, 158, 93, 49, 18, 177, 162,
@@ -28,7 +31,7 @@ function clampByte(value: number): number {
 }
 
 export function seedBrainDna(): BrainDNA {
-  return normalizeBrainDna(Uint8Array.from(SEED_BRAIN_DNA))
+  return adaptBakedBrainSeed(SEED_BRAIN_DNA)
 }
 
 /** A founder's brain: the baked seed with small jitter so a group isn't behaviorally identical. */

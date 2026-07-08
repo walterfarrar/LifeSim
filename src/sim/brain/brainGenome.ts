@@ -9,10 +9,29 @@ import type { Rng } from '../rng'
  */
 export type BrainDNA = Uint8Array
 
-/** Network shape. Inputs include a constant bias node at index 0. */
-export const BRAIN_INPUT_COUNT = 20
+/**
+ * Network shape. Inputs include a constant bias node at index 0. The input vector layout
+ * (see {@link ./senses.ts packBrainInputs}) is:
+ *   0  bias
+ *   1  hungerNeed        2  thirstNeed       3  fatigueNeed      4  reproReady
+ *   5  depthHere         6  depthAhead       7  depthLeft        8  depthRight
+ *   9  slopeAhead
+ *   10 food.forward      11 food.right       12 food.close
+ *   13 water.forward     14 water.right      15 water.close
+ *   16 mate.forward      17 mate.right
+ *   18 crowder.forward   19 crowder.right
+ *   20 elevationHere     21 slopeLeft        22 slopeRight
+ *   23 soilWaterHere     24 temperature      25 seasonSin       26 seasonCos
+ *   27 daylight
+ * New inputs are appended at the end so an older genome can be migrated in place — see
+ * {@link migrateBrainGenomeInputs}.
+ */
+export const BRAIN_INPUT_COUNT = 28
 export const BRAIN_HIDDEN_COUNT = 8
 export const BRAIN_OUTPUT_COUNT = 3
+
+/** Input count the baked founder seed in brainSeed.ts was evolved under (for migration). */
+export const BRAIN_SEED_INPUT_COUNT = 20
 
 export const BRAIN_HIDDEN_WEIGHT_COUNT = BRAIN_HIDDEN_COUNT * BRAIN_INPUT_COUNT
 export const BRAIN_OUTPUT_WEIGHT_COUNT = BRAIN_OUTPUT_COUNT * (BRAIN_HIDDEN_COUNT + 1)
@@ -96,4 +115,51 @@ export function normalizeBrainDna(brain: BrainDNA): BrainDNA {
   const copy = Math.min(brain.length, BRAIN_GENOME_LENGTH)
   for (let i = 0; i < copy; i++) out[i] = brain[i]
   return out
+}
+
+/** Genome length for a given input count, holding the hidden/output shape fixed. */
+export function brainGenomeLengthForInputs(inputCount: number): number {
+  return BRAIN_META_COUNT + BRAIN_HIDDEN_COUNT * inputCount + BRAIN_OUTPUT_WEIGHT_COUNT
+}
+
+/**
+ * Re-layout a genome that was built for `fromInputCount` inputs into the current
+ * {@link BRAIN_INPUT_COUNT} layout. Because new inputs are appended at the end, each hidden
+ * neuron's existing input weights are preserved and the new input slots are filled with the
+ * neutral byte (127 ≈ weight 0), so a migrated brain behaves identically at birth while gaining
+ * the capacity to wire up the new senses through learning and evolution. Output weights depend
+ * only on the (unchanged) hidden layer, so they carry over unchanged.
+ */
+export function migrateBrainGenomeInputs(
+  genome: ArrayLike<number>,
+  fromInputCount: number,
+): BrainDNA {
+  const out = new Uint8Array(BRAIN_GENOME_LENGTH).fill(127)
+  for (let m = 0; m < BRAIN_META_COUNT; m++) out[m] = genome[m] ?? 127
+
+  const copyInputs = Math.min(fromInputCount, BRAIN_INPUT_COUNT)
+  for (let h = 0; h < BRAIN_HIDDEN_COUNT; h++) {
+    const srcBase = BRAIN_META_COUNT + h * fromInputCount
+    const dstBase = BRAIN_WEIGHT_START + h * BRAIN_INPUT_COUNT
+    for (let i = 0; i < copyInputs; i++) out[dstBase + i] = genome[srcBase + i] ?? 127
+  }
+
+  const srcOut = BRAIN_META_COUNT + BRAIN_HIDDEN_COUNT * fromInputCount
+  const dstOut = BRAIN_WEIGHT_START + BRAIN_HIDDEN_WEIGHT_COUNT
+  for (let i = 0; i < BRAIN_OUTPUT_WEIGHT_COUNT; i++) out[dstOut + i] = genome[srcOut + i] ?? 127
+  return out
+}
+
+/**
+ * Adapt a baked founder seed array to the current layout: pass-through when it already matches,
+ * migrate when it matches the {@link BRAIN_SEED_INPUT_COUNT} legacy layout, else pad/trim.
+ */
+export function adaptBakedBrainSeed(bytes: ArrayLike<number>): BrainDNA {
+  if (bytes.length === BRAIN_GENOME_LENGTH) {
+    return normalizeBrainDna(Uint8Array.from(bytes))
+  }
+  if (bytes.length === brainGenomeLengthForInputs(BRAIN_SEED_INPUT_COUNT)) {
+    return migrateBrainGenomeInputs(bytes, BRAIN_SEED_INPUT_COUNT)
+  }
+  return normalizeBrainDna(Uint8Array.from(bytes))
 }
