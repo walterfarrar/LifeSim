@@ -9,7 +9,12 @@ import {
   type BrainDNA,
 } from '../brain/brainGenome'
 import { createBrainState } from '../brain/network'
-import { consolidateLearnedBrain } from '../brain/learning'
+import {
+  consolidateLearnedBrain,
+  rewardBrainAction,
+  BRAIN_MATE_REWARD,
+  BRAIN_BIRTH_REWARD,
+} from '../brain/learning'
 import { createRandomHerbivoreDNA } from '../herbivoreBudget'
 import { TREE_GRAZE_BITE_SCALE } from '../config'
 import { plantBiteEffectiveness } from '../foraging'
@@ -323,12 +328,12 @@ export function mate(male: Creature, female: Creature): boolean {
 
   const traitsMale = creatureTraits(male)
   const traitsFemale = creatureTraits(female)
-  const gift =
-    male.energy * traitsMale.offspringGift * 0.5 +
-    female.energy * traitsFemale.offspringGift * 0.5
+  const maleSpent = male.energy * traitsMale.offspringGift * 0.5
+  const femaleSpent = female.energy * traitsFemale.offspringGift * 0.5
+  const gift = maleSpent + femaleSpent
 
-  male.energy -= male.energy * traitsMale.offspringGift * 0.5
-  female.energy -= female.energy * traitsFemale.offspringGift * 0.5
+  male.energy -= maleSpent
+  female.energy -= femaleSpent
   male.reproductionCooldown = traitsMale.reproCooldown
   female.reproductionCooldown = traitsFemale.reproCooldown
 
@@ -336,6 +341,12 @@ export function mate(male: Creature, female: Creature): boolean {
   female.pregnancyPartnerDna = cloneDNA(male.dna)
   female.pregnancyPartnerBrainDna = cloneBrainDna(male.brainDna)
   female.pendingBirthEnergy = Math.min(traitsFemale.maxEnergy, gift)
+
+  // Positive reinforcement: mating satisfies the horny drive. Offset the energy the parent just
+  // invested (so the homeostatic reward doesn't read the courtship gift as starvation) and add a
+  // flat satisfaction reward, making a successful mating a clearly positive outcome to learn.
+  if (male.brain) rewardBrainAction(male.brain, maleSpent + BRAIN_MATE_REWARD)
+  if (female.brain) rewardBrainAction(female.brain, femaleSpent + BRAIN_MATE_REWARD)
   return true
 }
 
@@ -370,6 +381,10 @@ export function tickPregnancy(creature: Creature, rng: Rng): Creature | null {
   const fromMother = Math.min(creature.hydration * 0.14, targetHydration)
   creature.hydration = Math.max(0, creature.hydration - fromMother)
   child.hydration = fromMother
+
+  // Reward carrying to a live birth: offset the hydration handed to the newborn plus a bonus, so
+  // the whole reproduce-and-gestate chain reads as worthwhile rather than a pure resource drain.
+  if (creature.brain) rewardBrainAction(creature.brain, fromMother + BRAIN_BIRTH_REWARD)
 
   creature.pregnancyPartnerDna = undefined
   creature.pregnancyPartnerBrainDna = undefined

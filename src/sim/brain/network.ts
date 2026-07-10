@@ -32,6 +32,12 @@ export type BrainState = {
   baseline: number
   /** energy + hydration captured at the start of the tick, for the reward delta. */
   prevWellbeing: number
+  /**
+   * Explicit need-satisfaction reward accrued this tick (eating while hungry, drinking while
+   * thirsty, mating, giving birth), in wellbeing units. Added on top of the homeostatic delta and
+   * reset each tick. This is the positive-reinforcement channel for consummatory acts.
+   */
+  rewardBonus: number
   /** False until the first full tick has established a baseline (newborns skip one learn step). */
   primed: boolean
 }
@@ -68,6 +74,7 @@ export function createBrainState(brain: BrainDNA): BrainState {
     outputElig: new Float32Array(output.length),
     baseline: 0,
     prevWellbeing: 0,
+    rewardBonus: 0,
     primed: false,
   }
 }

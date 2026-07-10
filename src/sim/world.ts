@@ -50,7 +50,12 @@ import { brainForward } from './brain/network'
 import { packBrainInputs, type BrainSenseReadings, type SenseTarget } from './brain/senses'
 import { cloneBrainDna, type BrainDNA } from './brain/brainGenome'
 import { createSeedBrainDna } from './brain/brainSeed'
-import { beginBrainTick, learnFromOutcome } from './brain/learning'
+import {
+  beginBrainTick,
+  learnFromOutcome,
+  rewardBrainAction,
+  BRAIN_CONSUME_REWARD_WEIGHT,
+} from './brain/learning'
 import { toroidalDelta } from './toroidal'
 import {
   biteCorpse,
@@ -675,6 +680,25 @@ export class World {
       applyMovement(creature)
     }
 
+    // Snapshot resources + drive pressure before the eat/drink loops so we can reward satisfying a
+    // pressing need (metabolism/mating haven't run yet, so any gain here is pure intake).
+    const preConsume = brainControl
+      ? new Map<number, { energy: number; hydration: number; hunger: number; thirst: number }>()
+      : null
+    if (preConsume) {
+      for (const creature of this.creatures) {
+        if (!creature.brain) continue
+        const hungerExit = Math.max(hungryExitLine(creature), 1)
+        const thirstExit = Math.max(thirstyExitLine(creature), 1)
+        preConsume.set(creature.id, {
+          energy: creature.energy,
+          hydration: creature.hydration,
+          hunger: clamp01((hungerExit - creature.energy) / hungerExit),
+          thirst: clamp01((thirstExit - creature.hydration) / thirstExit),
+        })
+      }
+    }
+
     for (const creature of this.creatures) {
       if (!needsWater(creature)) continue
 
@@ -849,6 +873,20 @@ export class World {
           recordCreatureMemory(creature, 'food', prey.x, prey.y, traits)
           break
         }
+      }
+    }
+
+    // Positive reinforcement: reward eating in proportion to how hungry the creature was and
+    // drinking in proportion to how thirsty, so the brain learns "consume when the need is real".
+    if (preConsume) {
+      for (const creature of this.creatures) {
+        if (!creature.brain) continue
+        const pre = preConsume.get(creature.id)
+        if (!pre) continue
+        const ate = Math.max(0, creature.energy - pre.energy)
+        const drank = Math.max(0, creature.hydration - pre.hydration)
+        const intake = ate * pre.hunger + drank * pre.thirst
+        if (intake > 0) rewardBrainAction(creature.brain, intake * BRAIN_CONSUME_REWARD_WEIGHT)
       }
     }
 
