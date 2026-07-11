@@ -1,10 +1,13 @@
 /**
  * Offline neuroevolution harness. Evolves a competent founder brain and bakes the winner into
- * src/sim/brain/brainSeed.ts, so the live sim starts with creatures that forage and dodge deep
- * water instead of flailing. Run with: npm run evolve:brain
+ * src/sim/brain/brainSeed.ts, so the live sim starts with creatures that forage, hydrate, and
+ * reproduce instead of flailing. Run with: npm run evolve:brain
  *
- * This is a headless GA over the brain-weight genome only. Fitness rewards a lineage that keeps a
- * living, reproducing population out of the water over a fixed run.
+ * This is a headless GA over the brain-weight genome only — pure local CPU, no network/AI.
+ * Fitness rewards a living population with energy surplus, matings/births, and low thirst deaths.
+ *
+ * Env knobs (all optional):
+ *   BRAIN_POP=28  BRAIN_GENS=30  BRAIN_ELITES=5  BRAIN_TICKS=1200  BRAIN_SEEDS=101,202
  */
 import { writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -27,10 +30,13 @@ const { DEFAULT_SIM_SETTINGS } = await import('../src/sim/simSettings.ts')
 const { Rng } = await import('../src/sim/rng.ts')
 const {
   BRAIN_GENOME_LENGTH,
+  cloneBrainDna,
   createRandomBrainDna,
   crossoverBrainDna,
   mutateBrainDna,
 } = await import('../src/sim/brain/brainGenome.ts')
+const { seedBrainDna } = await import('../src/sim/brain/brainSeed.ts')
+const { reproduceModeThreshold } = await import('../src/sim/entities/creature.ts')
 
 type SimSettings = typeof DEFAULT_SIM_SETTINGS
 
@@ -42,12 +48,23 @@ const num = (key: string, fallback: number): number => {
 const POP = num('BRAIN_POP', 28)
 const GENERATIONS = num('BRAIN_GENS', 30)
 const ELITES = num('BRAIN_ELITES', 5)
-const EVAL_TICKS = num('BRAIN_TICKS', 900)
+/** Long enough for gestation (80–260 ticks) so births can actually register. */
+const EVAL_TICKS = num('BRAIN_TICKS', 1200)
 const SAMPLE_EVERY = 5
 const EVAL_SEEDS = (process.env.BRAIN_SEEDS ?? '101,202')
   .split(',')
   .map((s) => Number(s.trim()))
   .filter((n) => Number.isFinite(n))
+
+type EvalDetail = {
+  score: number
+  avgPop: number
+  finalPop: number
+  births: number
+  thirstDeaths: number
+  drownDeaths: number
+  avgSurplus: number
+}
 
 function evalSettings(): SimSettings {
   return {
@@ -69,52 +86,117 @@ function evalSettings(): SimSettings {
   }
 }
 
-function evaluateOnce(brain: BrainDNA, seed: number, settings: SimSettings): number {
+function evaluateOnce(brain: BrainDNA, seed: number, settings: SimSettings): EvalDetail {
   const world = new World(seed, settings)
   world.setFounderBrainDna(brain)
   world.reset(seed, settings)
 
   let popSum = 0
   let samples = 0
+  let surplusSum = 0
+  let surplusSamples = 0
   for (let t = 0; t < EVAL_TICKS; t++) {
     world.tick()
     if (t % SAMPLE_EVERY === 0) {
-      popSum += world.snapshot().stats.herbivoreCount
+      const snap = world.snapshot()
+      popSum += snap.stats.herbivoreCount
       samples += 1
+      for (const c of snap.creatures) {
+        surplusSum += c.energy - reproduceModeThreshold(c)
+        surplusSamples += 1
+      }
     }
   }
   const stats = world.snapshot().stats
   const avgPop = popSum / Math.max(samples, 1)
+  const finalPop = stats.herbivoreCount
   const drown = stats.deathCauseCounts.drowning ?? 0
+  const thirst = stats.deathCauseCounts.thirst ?? 0
+  const starve = stats.deathCauseCounts.starvation ?? 0
   const births = stats.births
-  return avgPop + births * 1.5 - drown * 2.0
+  const avgSurplus = surplusSum / Math.max(surplusSamples, 1)
+
+  // Survival first, then reproductive readiness, then actual births. Thirst is the dominant
+  // observed killer — punish it at least as hard as drowning so the GA doesn't "solve" water
+  // by never approaching it (which used to win when the water cue pointed into deep pond).
+  const score =
+    avgPop * 1.0 +
+    finalPop * 0.5 +
+    Math.max(0, avgSurplus) * 0.15 +
+    births * 4.0 -
+    thirst * 2.0 -
+    starve * 1.0 -
+    drown * 1.5
+
+  return {
+    score,
+    avgPop,
+    finalPop,
+    births,
+    thirstDeaths: thirst,
+    drownDeaths: drown,
+    avgSurplus,
+  }
 }
 
-function fitness(brain: BrainDNA, settings: SimSettings): number {
-  let sum = 0
-  for (const seed of EVAL_SEEDS) sum += evaluateOnce(brain, seed, settings)
-  return sum / EVAL_SEEDS.length
+function fitness(brain: BrainDNA, settings: SimSettings): EvalDetail {
+  const runs = EVAL_SEEDS.map((seed) => evaluateOnce(brain, seed, settings))
+  const n = runs.length
+  const avg = (pick: (d: EvalDetail) => number) => runs.reduce((s, d) => s + pick(d), 0) / n
+  return {
+    score: avg((d) => d.score),
+    avgPop: avg((d) => d.avgPop),
+    finalPop: avg((d) => d.finalPop),
+    births: avg((d) => d.births),
+    thirstDeaths: avg((d) => d.thirstDeaths),
+    drownDeaths: avg((d) => d.drownDeaths),
+    avgSurplus: avg((d) => d.avgSurplus),
+  }
+}
+
+/** Seed the GA from the current baked brain so we improve it instead of rediscovering foraging. */
+function initialPopulation(rng: Rng): BrainDNA[] {
+  const base = seedBrainDna()
+  const pop: BrainDNA[] = [cloneBrainDna(base)]
+  // Heavy mutants of the seed (local search around a known-ok policy).
+  while (pop.length < Math.ceil(POP * 0.7)) {
+    pop.push(mutateBrainDna(cloneBrainDna(base), rng))
+  }
+  // A few random genomes for diversity / escape from local optima.
+  while (pop.length < POP) {
+    pop.push(createRandomBrainDna(rng))
+  }
+  return pop
 }
 
 function main(): void {
   const settings = evalSettings()
   const rng = new Rng(20260707)
+  const started = Date.now()
 
-  let population: BrainDNA[] = Array.from({ length: POP }, () => createRandomBrainDna(rng))
-  let best: { brain: BrainDNA; score: number } | null = null
+  console.log(
+    `evolveBrain: pop=${POP} gens=${GENERATIONS} ticks=${EVAL_TICKS} seeds=${EVAL_SEEDS.join(',')} (warm-start from current seed)`,
+  )
+
+  let population = initialPopulation(rng)
+  let best: { brain: BrainDNA; detail: EvalDetail } | null = null
 
   for (let gen = 0; gen < GENERATIONS; gen++) {
     const scored = population
-      .map((brain) => ({ brain, score: fitness(brain, settings) }))
-      .sort((a, b) => b.score - a.score)
+      .map((brain) => ({ brain, detail: fitness(brain, settings) }))
+      .sort((a, b) => b.detail.score - a.detail.score)
 
-    if (!best || scored[0].score > best.score) {
-      best = { brain: scored[0].brain, score: scored[0].score }
+    if (!best || scored[0].detail.score > best.detail.score) {
+      best = { brain: scored[0].brain, detail: scored[0].detail }
     }
 
-    const mean = scored.reduce((acc, s) => acc + s.score, 0) / scored.length
+    const mean = scored.reduce((acc, s) => acc + s.detail.score, 0) / scored.length
+    const top = scored[0].detail
+    const elapsedMin = ((Date.now() - started) / 60000).toFixed(1)
     console.log(
-      `gen ${String(gen + 1).padStart(2)}/${GENERATIONS}  best=${scored[0].score.toFixed(1)}  mean=${mean.toFixed(1)}  allTimeBest=${best.score.toFixed(1)}`,
+      `gen ${String(gen + 1).padStart(2)}/${GENERATIONS}  best=${top.score.toFixed(1)}  mean=${mean.toFixed(1)}  allTime=${best.detail.score.toFixed(1)}  ` +
+        `pop=${top.avgPop.toFixed(1)}→${top.finalPop.toFixed(0)}  births=${top.births.toFixed(1)}  ` +
+        `surplus=${top.avgSurplus.toFixed(1)}  thirst=${top.thirstDeaths.toFixed(0)}  drown=${top.drownDeaths.toFixed(0)}  (${elapsedMin}m)`,
     )
 
     const next: BrainDNA[] = scored.slice(0, ELITES).map((s) => s.brain)
@@ -128,8 +210,11 @@ function main(): void {
   }
 
   if (!best) throw new Error('no best brain produced')
-  writeSeed(best.brain, best.score)
-  console.log(`\nBaked winning brain (score ${best.score.toFixed(1)}) into src/sim/brain/brainSeed.ts`)
+  writeSeed(best.brain, best.detail.score)
+  console.log(
+    `\nBaked winning brain (score ${best.detail.score.toFixed(1)}, births≈${best.detail.births.toFixed(1)}) into src/sim/brain/brainSeed.ts`,
+  )
+  console.log(`Total time: ${((Date.now() - started) / 60000).toFixed(1)} minutes`)
 }
 
 function writeSeed(brain: BrainDNA, score: number): void {
@@ -146,7 +231,7 @@ import type { Rng } from '../rng'
 
 /**
  * Founder behavior genome. Produced by the offline evolution harness (\`npm run evolve:brain\`) and
- * baked in here so the live sim starts with creatures that already forage and avoid deep water,
+ * baked in here so the live sim starts with creatures that already forage, hydrate, and reproduce,
  * instead of flailing randomly. Regenerate by re-running the harness; it overwrites this array.
  *
  * Last harness score: ${score.toFixed(1)} (length ${values.length}, expected ${BRAIN_GENOME_LENGTH}).

@@ -758,24 +758,63 @@ export class TerrainWater {
     return best
   }
 
+  /**
+   * Linear scan of all surface-water cells for the best target near `(x, y)`.
+   * Use this for map-wide queries — {@link findBestSurfaceTarget} is O(range²) and hangs on huge ranges.
+   */
+  findBestSurfaceTargetGlobal(x: number, y: number): SurfaceWaterTarget | null {
+    let best: SurfaceWaterTarget | null = null
+    let bestScore = -1
+    const mapScale = Math.max(this.cols * this.cellW, this.rows * this.cellH)
+    for (let idx = 0; idx < this.surfaceWater.length; idx++) {
+      const water = this.surfaceWater[idx]
+      if (water <= 0.5) continue
+      const cx = idx % this.cols
+      const cy = Math.floor(idx / this.cols)
+      const center = this.cellWorldCenter(cx, cy)
+      const { dx, dy } = toroidalDelta({ x, y }, center)
+      const dist = Math.hypot(dx, dy)
+      const score = water / (1 + dist / mapScale)
+      if (score > bestScore) {
+        bestScore = score
+        best = { x: center.x, y: center.y, water }
+      }
+    }
+    return best
+  }
+
   surfaceWaterScore(dist: number, seekRange: number, pondDrinking: number): number {
     if (pondDrinking <= 0) return 0
     return pondDrinking / (1 + dist / Math.max(seekRange, 1))
   }
 
   /** Shore point outside standing water, toward `from`. */
-  shoreApproachTarget(from: Vec2, waterCenter: Vec2, margin: number): Vec2 {
+  /**
+   * Stand-off point for drinking from surface water.
+   * `drinkReach` is the creature's surface-drink radius (`radius + forageReach * 0.35`).
+   * Prefer walking onto the water cell when it's shallow enough to stand; otherwise stand on the
+   * near shore well inside drink reach (leaving room for movement stop-distance).
+   */
+  shoreApproachTarget(from: Vec2, waterCenter: Vec2, drinkReach: number): Vec2 {
+    const reach = Math.max(drinkReach, 1)
+    // Approximate body radius from drink reach (radius dominates; forageReach is the rest).
+    const bodyRadius = Math.max(3, reach * 0.45)
+    if (!this.isSubmerged(waterCenter.x, waterCenter.y, bodyRadius)) {
+      return wrapPosition({ x: waterCenter.x, y: waterCenter.y })
+    }
+
     const { dx, dy } = toroidalDelta(from, waterCenter)
     const dist = Math.hypot(dx, dy)
+    // Stay close enough that stopDistance (~1–10) can't push the creature out of sip range.
+    const shoreDist = Math.max(1, Math.min(reach * 0.3, Math.min(this.cellW, this.cellH) * 0.2))
     if (dist < 1e-3) {
-      return wrapPosition({ x: waterCenter.x + this.cellW * 0.5 + margin, y: waterCenter.y })
+      return wrapPosition({ x: waterCenter.x + shoreDist, y: waterCenter.y })
     }
     const nx = dx / dist
     const ny = dy / dist
-    const shoreDist = Math.min(this.cellW, this.cellH) * 0.48 + margin
     return wrapPosition({
-      x: waterCenter.x + nx * shoreDist,
-      y: waterCenter.y + ny * shoreDist,
+      x: waterCenter.x - nx * shoreDist,
+      y: waterCenter.y - ny * shoreDist,
     })
   }
 
@@ -820,7 +859,7 @@ export class TerrainWater {
     let bestDepth = this.surfaceWater[idx]
     if (bestDepth <= 0.5) {
       bestDepth = 0
-      const reach = traits.radius + traits.forageReach * 0.35
+      const reach = traits.radius + traits.forageReach * 0.85
       const cellRange = Math.ceil(reach / Math.min(this.cellW, this.cellH))
       const cx0 = this.wrap(Math.floor(creature.x / this.cellW), this.cols)
       const cy0 = this.wrap(Math.floor(creature.y / this.cellH), this.rows)

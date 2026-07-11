@@ -40,7 +40,7 @@ export function pondApproachTarget(
   from: Vec2,
   waterCenter: Vec2,
   terrain: TerrainWater,
-  margin: number,
+  drinkReach: number,
 ): Vec2 {
-  return terrain.shoreApproachTarget(from, waterCenter, margin)
+  return terrain.shoreApproachTarget(from, waterCenter, drinkReach)
 }

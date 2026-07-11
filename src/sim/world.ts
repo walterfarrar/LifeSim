@@ -703,9 +703,14 @@ export class World {
       if (!needsWater(creature)) continue
 
       const traits = creatureTraits(creature)
+      // Emergency drinking: even forage-preferring genotypes may sip from standing water when dry.
+      // Without a floor, pondDrinking≈0 creatures never call tryDrinkFromSurface and dehydrate
+      // beside lakes.
+      const drinkFactor =
+        creature.mode === 'thirsty' ? Math.max(traits.pondDrinking, 0.55) : traits.pondDrinking
 
-      if (traits.pondDrinking > 0) {
-        const sip = tryDrinkFromSurface(creature, this.terrain, traits.pondDrinking)
+      if (drinkFactor > 0) {
+        const sip = tryDrinkFromSurface(creature, this.terrain, drinkFactor)
         if (sip > 0) {
           creature.hydration = capHydration(creature, creature.hydration + sip)
           const target = this.terrain.findBestSurfaceTarget(creature.x, creature.y, traits.forageReach)
@@ -1140,7 +1145,7 @@ export class World {
             creature,
             surface,
             this.terrain,
-            traits.radius + traits.forageReach * 0.2,
+            traits.radius + traits.forageReach * 0.85,
           )
         }
       }
@@ -1150,16 +1155,27 @@ export class World {
 
   private findWaterGoal(creature: Creature, vision: number): { x: number; y: number } {
     const traits = creatureTraits(creature)
-    const canSurface = traits.pondDrinking > 0.08
+    // Ponds stay available even for forage-preferring genotypes — otherwise they dehydrate
+    // next to lakes they genetically "don't drink from."
+    const canSurface = true
     const seekRange = vision * traits.exploreVisionMult
     const memoryRange = seekRange * (1.6 + traits.memoryRecall)
+    const drinkReach = traits.radius + traits.forageReach * 0.85
+    const pondBias = Math.max(0.35, traits.pondDrinking)
+    const criticallyDry =
+      creature.mode === 'thirsty' || creature.hydration < thirstyExitLine(creature) * 0.85
 
     const memory = bestMemoryGoal(creature, 'water', traits, memoryRange)
     const memoryScore = memory?.score ?? 0
 
-    const surface = canSurface ? findBestPondTarget(creature, this.terrain, seekRange) : null
+    const surface = criticallyDry
+      ? this.terrain.findBestSurfaceTargetGlobal(creature.x, creature.y)
+      : findBestPondTarget(creature, this.terrain, seekRange)
+    if (criticallyDry && surface) {
+      return pondApproachTarget(creature, surface, this.terrain, drinkReach)
+    }
     const surfaceDist = surface ? toroidalDistance(creature, surface) : Infinity
-    const surfaceScore = surface ? pondWaterScore(creature, surfaceDist, seekRange) : 0
+    const surfaceScore = surface ? pondWaterScore(creature, surfaceDist, seekRange) * pondBias : 0
 
     const plant = findBestPlantWaterTarget(creature, this.ediblePlants, seekRange)
     const plantDist = plant ? toroidalDistance(creature, plant) : Infinity
@@ -1181,12 +1197,7 @@ export class World {
     }
 
     if (surfaceScore >= plantScore && surfaceScore >= grassScore && surface) {
-      return pondApproachTarget(
-        creature,
-        surface,
-        this.terrain,
-        traits.radius + traits.forageReach * 0.2,
-      )
+      return pondApproachTarget(creature, surface, this.terrain, drinkReach)
     }
 
     if (plantScore >= grassScore && plant) {
@@ -1197,14 +1208,9 @@ export class World {
       return grassCenter
     }
 
-    const fallbackSurface = canSurface ? findBestPondTarget(creature, this.terrain, vision) : null
+    const fallbackSurface = findBestPondTarget(creature, this.terrain, vision)
     if (fallbackSurface) {
-      return pondApproachTarget(
-        creature,
-        fallbackSurface,
-        this.terrain,
-        traits.radius + traits.forageReach * 0.2,
-      )
+      return pondApproachTarget(creature, fallbackSurface, this.terrain, drinkReach)
     }
 
     if (memory && memoryScore > 0.04) {
@@ -1274,10 +1280,27 @@ export class World {
     const sin = Math.sin(creature.heading)
     let dirX = out.forward * cos - out.right * sin
     let dirY = out.forward * sin + out.right * cos
+
+    // Thirst competence assist (same spirit as the attack reflex): when thirsty and a drinkable
+    // shore/plant/dew target is sensed, steer toward it. Critical thirst fully overrides the net
+    // so a seed that still flees water (trained under the old deep-pond cue) can still drink.
+    if (creature.mode === 'thirsty' && readings.water && readings.thirstNeed > 0.2) {
+      const wDist = Math.hypot(readings.water.dx, readings.water.dy)
+      if (wDist > 1e-4) {
+        const blend = readings.thirstNeed > 0.55 ? 1 : 0.4 + readings.thirstNeed * 0.55
+        dirX = dirX * (1 - blend) + (readings.water.dx / wDist) * blend
+        dirY = dirY * (1 - blend) + (readings.water.dy / wDist) * blend
+      }
+    }
+
     const mag = Math.hypot(dirX, dirY)
 
     let speed = traits.speed * out.throttle
     if (creature.mode === 'sleepy') speed *= traits.sleepMobility
+    // Don't dawdle while critically thirsty — get to the drink.
+    if (creature.mode === 'thirsty' && readings.thirstNeed > 0.5) {
+      speed = Math.max(speed, traits.speed * 0.55)
+    }
 
     if (mag < 1e-4 || speed < 1e-4) {
       creature.vx = 0
@@ -1356,30 +1379,62 @@ export class World {
     return { dx, dy, close: clamp01(1 - dist / Math.max(range, 1)) }
   }
 
+  /**
+   * Water cue for the brain. Must match legacy {@link findWaterGoal}: pond targets are the
+   * *drinkable shore*, not the deep cell center. Pointing at deep water taught brains to avoid
+   * the water cue (approach → drown → negative reward) and die of thirst instead.
+   */
   private nearestWaterPoint(
     creature: Creature,
     traits: ReturnType<typeof creatureTraits>,
     range: number,
   ): Vec2 | null {
-    let best: Vec2 | null = null
-    let bestDist = Infinity
-    const consider = (point: Vec2 | null) => {
-      if (!point) return
-      const d = toroidalDistance(creature, point)
-      if (d < bestDist) {
-        bestDist = d
-        best = { x: point.x, y: point.y }
-      }
+    const seekRange = range * traits.exploreVisionMult
+    const drinkReach = traits.radius + traits.forageReach * 0.85
+    const criticallyDry =
+      creature.mode === 'thirsty' || creature.hydration < thirstyExitLine(creature) * 0.85
+
+    // When dry, linear global pond scan so vision-limited local plant/dew cues don't trap
+    // creatures far from lakes. (Range-based search is O(range²) and too slow map-wide.)
+    const surface = criticallyDry
+      ? this.terrain.findBestSurfaceTargetGlobal(creature.x, creature.y)
+      : findBestPondTarget(creature, this.terrain, seekRange)
+    if (criticallyDry && surface) {
+      return pondApproachTarget(creature, surface, this.terrain, drinkReach)
     }
 
-    if (traits.pondDrinking > 0.05) {
-      consider(this.terrain.findBestSurfaceTarget(creature.x, creature.y, range))
-    }
-    consider(findBestPlantWaterTarget(creature, this.ediblePlants, range))
-    const grassIdx = findBestGrassWaterTarget(creature, this.grass, range)
-    if (grassIdx !== null) consider(this.grass.cellCenter(grassIdx))
+    const surfaceDist = surface ? toroidalDistance(creature, surface) : Infinity
+    const pondBias = Math.max(0.35, traits.pondDrinking)
+    const surfaceScore = surface
+      ? pondWaterScore(creature, surfaceDist, seekRange) * pondBias
+      : 0
 
-    return best
+    const plant = findBestPlantWaterTarget(creature, this.ediblePlants, seekRange)
+    const plantDist = plant ? toroidalDistance(creature, plant) : Infinity
+    const plantScore = plant
+      ? plantWaterScore(plant, plantDist, seekRange, traits.forageWaterPreference)
+      : 0
+
+    const grassIdx = findBestGrassWaterTarget(creature, this.grass, seekRange)
+    const grassCenter = grassIdx !== null ? this.grass.cellCenter(grassIdx) : null
+    const grassDist = grassCenter ? toroidalDistance(creature, grassCenter) : Infinity
+    const grassScore =
+      grassIdx !== null
+        ? grassWaterScore(this.grass, grassIdx, grassDist, seekRange, traits.forageWaterPreference)
+        : 0
+
+    if (surfaceScore >= plantScore && surfaceScore >= grassScore && surface) {
+      return pondApproachTarget(creature, surface, this.terrain, drinkReach)
+    }
+    if (plantScore >= grassScore && plant) {
+      return { x: plant.x, y: plant.y }
+    }
+    if (grassCenter) return grassCenter
+
+    if (surface) {
+      return pondApproachTarget(creature, surface, this.terrain, drinkReach)
+    }
+    return null
   }
 
   private nearestMatePoint(creature: Creature, range: number): Vec2 | null {

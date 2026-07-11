@@ -62,16 +62,10 @@ export function distributeInitialWorldWater(
   terrain.floodToVolume(surfaceUnits)
 }
 
-function nearestSurfaceWater(creature: Creature, terrain: TerrainWater): { x: number; y: number } | null {
-  const target = terrain.findBestSurfaceTarget(creature.x, creature.y, 600)
-  return target ? { x: target.x, y: target.y } : null
-}
-
 /**
- * Fund spawn hydration by drawing real water from the pools: nearest standing water first
- * (creatures drink from ponds), then the local air and soil. A creature can only carry away what
- * the pools could actually supply — no water is minted. If the world is too dry to fund a spawn,
- * the newcomer simply arrives thirsty rather than inflating the total water budget.
+ * Fund spawn hydration by drawing real water from the pools: standing surface water first
+ * (creatures drink from ponds), then local air and soil. No water is minted — if pools can't
+ * supply a spawn, the newcomer arrives thirsty rather than inflating the total budget.
  */
 export function fundInitialCreatureHydration(
   creatures: readonly Creature[],
@@ -87,9 +81,14 @@ export function fundInitialCreatureHydration(
     }
     let funded = 0
 
-    const waterCell = nearestSurfaceWater(creature, terrain)
-    if (waterCell) {
-      funded += terrain.consumeAt(waterCell.x, waterCell.y, target - funded)
+    // Keep pulling from the richest remaining surface cell until birth hydration is met
+    // (or surface water is exhausted). A single cell often can't fund a whole founder group.
+    for (let pulls = 0; pulls < 12 && funded < target; pulls++) {
+      const waterCell = terrain.findBestSurfaceTargetGlobal(creature.x, creature.y)
+      if (!waterCell) break
+      const taken = terrain.consumeAt(waterCell.x, waterCell.y, target - funded)
+      if (taken <= 0) break
+      funded += taken
     }
     if (funded < target) {
       funded += pullWaterFromPools(creature.x, creature.y, target - funded, soil, atmosphere)
