@@ -30,7 +30,7 @@ export interface Plant {
   y: number
   dna: DNA
   energy: number
-  /** Water units stored in live tissue — tracked separately from dry biomass energy. */
+  /** Water units stored in live tissue — scales with size toward a small full-plant max. */
   water: number
   age: number
   /** Consecutive ticks without enough soil moisture — ramps drought damage. */

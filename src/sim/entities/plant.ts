@@ -12,7 +12,7 @@ import { wrapPosition } from '../toroidal'
 import type { Creature, Plant, Vec2 } from '../types'
 import { getWorldBounds } from '../worldBounds'
 import { moistureGrowthFactor, type SoilAccess } from '../soilMoisture'
-import { waterUnitsForGrowth, clampGrowthReserveOverflow } from '../plantWaterUptake'
+import { waterUnitsForGrowth, clampTissueWaterOverflow, consumeSoilWaterForGrowth, plantTissueWaterCapacity } from '../plantWaterUptake'
 import { releaseTranspiredWater, type AtmospherePool } from '../transpiration'
 import { temperatureGrowthFactor } from '../temperature'
 import { capEnergy, capHydration, creatureTraits } from './creature'
@@ -101,10 +101,10 @@ function buildPlant(
 }
 
 /** Spread range grows as the parent plant ages — colonies push outward over time. */
-/** Room left in the growth reserve (not structural biomass water). */
+/** Free tissue-water capacity — scales from 0 (tiny) to {@link PLANT_MAX_TISSUE_WATER} at full size. */
 export function plantMaxStoredWater(plant: Plant): number {
   const traits = plantTraits(plant)
-  return Math.max(0, (traits.maxEnergy - plant.energy) * PLANT_WATER_PER_ENERGY)
+  return plantTissueWaterCapacity(plant.energy, traits.maxEnergy)
 }
 
 /** Pull growth reserve from local soil on spawn (overflow transpires). */
@@ -308,7 +308,13 @@ export function applyPlantDrought(
     kindDrainScale
 
   const released = drain * PLANT_WATER_PER_ENERGY
+  const beforeEnergy = plant.energy
   plant.energy = Math.max(0, plant.energy - drain)
+  if (beforeEnergy > 0 && plant.water > 0) {
+    const tissueLost = plant.water * (Math.min(drain, beforeEnergy) / beforeEnergy)
+    plant.water = Math.max(0, plant.water - tissueLost)
+    return released + tissueLost
+  }
   return released
 }
 
@@ -338,19 +344,18 @@ export function growPlant(
   const potentialGrowth = traits.growthRate * moistureFactor * sunlight * tempFactor * seasonal
   if (potentialGrowth <= 0) return
 
-  const waterDemandUnits = waterUnitsForGrowth(potentialGrowth)
-  const available = Math.min(plant.water, waterDemandUnits)
-  const waterFactor = waterDemandUnits > 0 ? available / waterDemandUnits : 0
-  const uncappedGrowth = potentialGrowth * waterFactor
+  // Demand only for growth that can actually fit — pulling for full potential then room-capping
+  // used to destroy the unused soil water (closed-cycle leak).
   const room = Math.max(0, traits.maxEnergy - plant.energy)
-  const growth = Math.min(room, uncappedGrowth)
-  let waterConsumed = available
-  if (uncappedGrowth > 1e-9 && growth < uncappedGrowth) {
-    waterConsumed = available * (growth / uncappedGrowth)
-  }
-  plant.water = Math.max(0, plant.water - waterConsumed)
+  if (room <= 0) return
+  const desiredGrowth = Math.min(room, potentialGrowth)
+  const waterDemandUnits = waterUnitsForGrowth(desiredGrowth)
+  const available = consumeSoilWaterForGrowth(plant.x, plant.y, waterDemandUnits, soil)
+  if (available <= 0 || waterDemandUnits <= 0) return
+  const growth = desiredGrowth * (available / waterDemandUnits)
   plant.energy += growth
-  plant.water = clampGrowthReserveOverflow(
+  // Capacity rose with size; keep tissue under the new cap (does not consume tissue to grow).
+  plant.water = clampTissueWaterOverflow(
     plant.water,
     plant.energy,
     traits.maxEnergy,

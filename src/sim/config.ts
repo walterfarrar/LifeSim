@@ -254,6 +254,11 @@ export const RAIN_SOIL_FRACTION = 0
 export const RAIN_POND_FRACTION = 1
 /** Fraction of plant biomass energy stored as retrievable tissue water. */
 export const PLANT_WATER_PER_ENERGY = 0.26
+/**
+ * Free tissue-water store scales with plant size (energy / maxEnergy), from 0 when tiny up to this
+ * full-size maximum. Separate from water bound in biomass (`energy * PLANT_WATER_PER_ENERGY`).
+ */
+export const PLANT_MAX_TISSUE_WATER = 1
 /** Living plants pull soil moisture every tick; overflow transpires to air at capacity. */
 export const PLANT_LIVE_SOIL_UPTAKE_RATE = 0.0055
 export const PLANT_LIVE_UPTAKE_DORMANT_SCALE = 0.14
@@ -265,7 +270,7 @@ export const GRASS_TURF_GROWTH_SCALE = 0.18
 export const GRASS_GRAZE_MAX_PER_CELL_PER_TICK = 2
 /** Digestible energy from grass biomass vs woody plants (filler browse, not a staple). */
 export const GRASS_FOOD_EFFICIENCY = 0.36
-/** Fraction of grass tissue water absorbed when grazing or sipping dew. */
+/** @deprecated Grass forage now transfers liberated water at 100% (overflow vents); kept for save compat. */
 export const GRASS_WATER_HYDRATION_EFFICIENCY = 0.14
 /** Target-selection bias — grass is chosen only when little else is nearby. */
 export const GRASS_FOOD_PREFERENCE = 0.22

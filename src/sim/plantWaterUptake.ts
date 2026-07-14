@@ -1,6 +1,7 @@
 import {
   PLANT_LIVE_SOIL_UPTAKE_RATE,
   PLANT_LIVE_UPTAKE_DORMANT_SCALE,
+  PLANT_MAX_TISSUE_WATER,
   PLANT_WATER_PER_ENERGY,
   SOIL_CELL_WATER_CAPACITY,
 } from './config'
@@ -24,11 +25,36 @@ export type PlantWaterUptakeInput = {
   dormant?: boolean
 }
 
-/** Growth reserve only — surplus above water already bound in biomass energy. */
-export function plantGrowthReserveCapacity(energy: number, maxEnergy: number): number {
-  return Math.max(0, (maxEnergy - energy) * PLANT_WATER_PER_ENERGY)
+/**
+ * Free tissue-water capacity: 0 when the plant is tiny, up to {@link PLANT_MAX_TISSUE_WATER} at
+ * full size. Growing plants fill toward this cap; eating/death removes a pro-rata share.
+ */
+export function plantTissueWaterCapacity(energy: number, maxEnergy: number): number {
+  if (energy <= 0 || maxEnergy <= 0) return 0
+  return PLANT_MAX_TISSUE_WATER * Math.min(1, energy / maxEnergy)
 }
 
+/** @deprecated Use {@link plantTissueWaterCapacity}. */
+export function plantGrowthReserveCapacity(energy: number, maxEnergy: number): number {
+  return plantTissueWaterCapacity(energy, maxEnergy)
+}
+
+export function clampTissueWaterOverflow(
+  water: number,
+  energy: number,
+  maxEnergy: number,
+  atmosphere: AtmospherePool,
+  soil: SoilAccess,
+  position: { x: number; y: number },
+): number {
+  const cap = plantTissueWaterCapacity(energy, maxEnergy)
+  if (water <= cap) return water
+  const overflow = water - cap
+  releaseTranspiredWater(atmosphere, soil, position.x, position.y, overflow)
+  return cap
+}
+
+/** @deprecated Use {@link clampTissueWaterOverflow}. */
 export function clampGrowthReserveOverflow(
   water: number,
   energy: number,
@@ -37,11 +63,7 @@ export function clampGrowthReserveOverflow(
   soil: SoilAccess,
   position: { x: number; y: number },
 ): number {
-  const cap = plantGrowthReserveCapacity(energy, maxEnergy)
-  if (water <= cap) return water
-  const overflow = water - cap
-  releaseTranspiredWater(atmosphere, soil, position.x, position.y, overflow)
-  return cap
+  return clampTissueWaterOverflow(water, energy, maxEnergy, atmosphere, soil, position)
 }
 
 /** Pull moisture from soil into tissue water; at capacity, excess transpires to air. */
@@ -67,6 +89,18 @@ export function uptakeSoilWaterIntoPlant(input: PlantWaterUptakeInput): number {
 export function waterUnitsForGrowth(potentialEnergyGrowth: number): number {
   if (potentialEnergyGrowth <= 0) return 0
   return potentialEnergyGrowth * PLANT_WATER_PER_ENERGY
+}
+
+/** Draw growth water straight from soil (tissue water is a separate size-scaled store). */
+export function consumeSoilWaterForGrowth(
+  x: number,
+  y: number,
+  demandUnits: number,
+  soil: SoilAccess,
+): number {
+  if (demandUnits <= 0) return 0
+  const taken = soil.consume(x, y, demandUnits / SOIL_CELL_WATER_CAPACITY)
+  return taken * SOIL_CELL_WATER_CAPACITY
 }
 
 /** Total hydric mass in a plant — tissue water plus water bound in biomass. */

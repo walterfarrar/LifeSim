@@ -3,7 +3,6 @@ import {
   GRASS_GRAZE_BITE_SCALE,
   GRASS_GRAZE_MAX_PER_CELL_PER_TICK,
   GRASS_MIN_LIVE_ENERGY,
-  GRASS_WATER_HYDRATION_EFFICIENCY,
   PLANT_WATER_PER_ENERGY,
 } from './config'
 import { capEnergy, capHydration, creatureTraits } from './entities/creature'
@@ -134,11 +133,9 @@ export function forageGrassBite(
 
   const traits = creatureTraits(creature)
   const hydrationBefore = creature.hydration
-  const deliverable = totalWater * GRASS_WATER_HYDRATION_EFFICIENCY
-  creature.hydration = capHydration(creature, creature.hydration + deliverable)
+  // Same as woody plants: all water liberated by the bite goes to the creature; only overflow vents.
+  creature.hydration = capHydration(creature, creature.hydration + totalWater)
   const absorbed = creature.hydration - hydrationBefore
-  // The grass gave up `totalWater`; whatever the creature couldn't absorb (efficiency loss
-  // plus hydration overflow) vents to air instead of vanishing from the water budget.
   const center = grass.cellCenter(index)
   atmosphere.vent(center.x, center.y, Math.max(0, totalWater - absorbed))
 
@@ -169,14 +166,13 @@ export function trySipGrassDew(
   const rawSip = Math.min(
     traits.biteAmount * 0.05 * traits.forageWaterPreference,
     grass.water[index] * 0.18,
-    room / Math.max(GRASS_WATER_HYDRATION_EFFICIENCY, 0.01),
+    room,
   )
   if (rawSip <= 0) return 0
 
   grass.water[index] = Math.max(0, grass.water[index] - rawSip)
-  const usableWater = rawSip * GRASS_WATER_HYDRATION_EFFICIENCY
   const hydrationBefore = creature.hydration
-  creature.hydration = capHydration(creature, creature.hydration + usableWater)
+  creature.hydration = capHydration(creature, creature.hydration + rawSip)
   atmosphere.vent(center.x, center.y, Math.max(0, rawSip - (creature.hydration - hydrationBefore)))
   return rawSip
 }

@@ -33,7 +33,12 @@ import { temperatureGrowthFactor } from './temperature'
 import { mutatePlant } from './mutation'
 import { expressPlant } from './phenotype'
 import { pullWaterFromPools } from './waterInit'
-import { uptakeSoilWaterIntoPlant, waterUnitsForGrowth, clampGrowthReserveOverflow } from './plantWaterUptake'
+import {
+  consumeSoilWaterForGrowth,
+  plantTissueWaterCapacity,
+  uptakeSoilWaterIntoPlant,
+  waterUnitsForGrowth,
+} from './plantWaterUptake'
 import { releaseTranspiredWater, type AtmospherePool } from './transpiration'
 import { grassSunlightWithTreeShade } from './grassTreeShade'
 import type { Rng } from './rng'
@@ -69,9 +74,9 @@ function cellTraits(dna: DNA) {
   return expressPlant(dna)
 }
 
-function growthReserveCapacity(dna: DNA, energy: number): number {
+function tissueWaterCapacity(dna: DNA, energy: number): number {
   const traits = cellTraits(dna)
-  return Math.max(0, (traits.maxEnergy - energy) * PLANT_WATER_PER_ENERGY)
+  return plantTissueWaterCapacity(energy, traits.maxEnergy)
 }
 
 function grassTintFromDna(dna: DNA, energy: number): [number, number, number, number] {
@@ -285,7 +290,7 @@ export class GrassCover {
   absorbWaterFromSoil(index: number, soil: SoilAccess, atmosphere: AtmospherePool): void {
     const dna = this.dnaByCell[index]
     if (!dna) return
-    const reserveCap = growthReserveCapacity(dna, this.energy[index])
+    const reserveCap = tissueWaterCapacity(dna, this.energy[index])
     if (reserveCap <= 0 || this.water[index] >= reserveCap) return
 
     const { x, y } = this.cellCenter(index)
@@ -314,7 +319,7 @@ export class GrassCover {
       energy: this.energy[index],
       maxEnergy: traits.maxEnergy,
       water: this.water[index],
-      maxStoredWater: growthReserveCapacity(dna, this.energy[index]),
+      maxStoredWater: tissueWaterCapacity(dna, this.energy[index]),
       moistureNeed: traits.moistureNeed,
       soil,
       atmosphere,
@@ -407,26 +412,20 @@ export class GrassCover {
       GRASS_TURF_GROWTH_SCALE
     if (potentialGrowth <= 0) return 0
 
-    const demand = waterUnitsForGrowth(potentialGrowth)
-    const available = Math.min(this.water[index], demand)
-    const waterFactor = demand > 0 ? available / demand : 0
-    const uncappedGrowth = potentialGrowth * waterFactor
+    // Only pull soil water for biomass that fits; unused pull was vanishing from the totals.
     const room = Math.max(0, traits.maxEnergy - this.energy[index])
-    const growth = Math.min(room, uncappedGrowth)
-    let waterConsumed = available
-    if (uncappedGrowth > 1e-9 && growth < uncappedGrowth) {
-      waterConsumed = available * (growth / uncappedGrowth)
-    }
-    this.water[index] = Math.max(0, this.water[index] - waterConsumed)
+    if (room <= 0) return 0
+    const desiredGrowth = Math.min(room, potentialGrowth)
+    const demand = waterUnitsForGrowth(desiredGrowth)
+    const available = consumeSoilWaterForGrowth(x, y, demand, soil)
+    if (available <= 0 || demand <= 0) return 0
+    const growth = desiredGrowth * (available / demand)
     this.energy[index] += growth
-    this.water[index] = clampGrowthReserveOverflow(
-      this.water[index],
-      this.energy[index],
-      traits.maxEnergy,
-      atmosphere,
-      soil,
-      { x, y },
-    )
+    const reserveCap = tissueWaterCapacity(dna, this.energy[index])
+    if (this.water[index] > reserveCap) {
+      releaseTranspiredWater(atmosphere, soil, x, y, this.water[index] - reserveCap)
+      this.water[index] = reserveCap
+    }
     return Math.max(0, this.energy[index] - before)
   }
 
@@ -466,10 +465,22 @@ export class GrassCover {
     const beforeEnergy = this.energy[index]
     const afterEnergy = Math.max(0, beforeEnergy * (1 - fraction))
     const energyLost = beforeEnergy - afterEnergy
-    const released = energyLost * PLANT_WATER_PER_ENERGY
+    const structuralReleased = energyLost * PLANT_WATER_PER_ENERGY
+    const tissueLost = beforeEnergy > 0 ? this.water[index] * (energyLost / beforeEnergy) : 0
     this.energy[index] = afterEnergy
-    if (released > 0) {
-      this.releaseTranspiration(index, released, soil, atmosphere)
+    this.water[index] = Math.max(0, this.water[index] - tissueLost)
+    const dna = this.dnaByCell[index]
+    if (dna) {
+      const cap = tissueWaterCapacity(dna, this.energy[index])
+      if (this.water[index] > cap) {
+        const overflow = this.water[index] - cap
+        this.water[index] = cap
+        this.releaseTranspiration(index, structuralReleased + tissueLost + overflow, soil, atmosphere)
+        return
+      }
+    }
+    if (structuralReleased + tissueLost > 0) {
+      this.releaseTranspiration(index, structuralReleased + tissueLost, soil, atmosphere)
     }
   }
 

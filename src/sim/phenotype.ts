@@ -56,8 +56,10 @@ export function expressHerbivore(dna: DNA): HerbivoreTraits {
     maturationAge: 30 + g(HerbivoreGene.Maturation) * 110,
     pregnancyTicks: 80 + g(HerbivoreGene.Gestation) * 180,
     maxEnergy: 110 + g(HerbivoreGene.MaxEnergy) * 90,
-    maxHydration: 110 + g(HerbivoreGene.MaxEnergy) * 90,
-    thirstDehydration: 0.045 + g(HerbivoreGene.Metabolism) * 0.15,
+    /** ~one soil tile of water (7–13); kept on MaxEnergy so larger bodies still hold a bit more. */
+    maxHydration: 7 + g(HerbivoreGene.MaxEnergy) * 6,
+    /** Scaled with the small tank so lifetime-to-thirst stays similar to the old 110–200 tanks. */
+    thirstDehydration: 0.004 + g(HerbivoreGene.Metabolism) * 0.012,
     reproCooldown: 60 + g(HerbivoreGene.ReproCooldown) * 180,
     mateRange: 8 + g(HerbivoreGene.MateRange) * 16,
     sleepMobility: 0.2 + g(HerbivoreGene.SleepMobility) * 0.55,
