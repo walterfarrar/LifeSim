@@ -9,7 +9,13 @@ import { SOIL_CELL_WATER_CAPACITY, TICKS_PER_SECOND } from '../sim/config'
 import { dayNightLabel, applyViewportAmbienceStyle } from '../sim/dayNight'
 import { formatDayLengthSeconds, seasonLabel, type SeasonName } from '../sim/seasons'
 import { formatTemperatureC } from '../sim/temperature'
-import { MIN_SPEED_MULTIPLIER } from '../sim/timeScale'
+import {
+  clampSpeedMultiplier,
+  maxTicksPerFrame,
+  paintEveryNFrames,
+  snapshotReportIntervalMs,
+  tickTimeBudgetMs,
+} from '../sim/timeScale'
 import { corpseRadius, drawCorpseBody } from '../sim/entities/corpse'
 import { plantRadius } from '../sim/entities/plant'
 import { drawPlantBody } from '../sim/render/plantDraw'
@@ -109,7 +115,7 @@ export function SimulationCanvas({
     sunlight: 0.5,
     isNight: false,
     season: 'spring' as SeasonName,
-    dayLengthSeconds: 24,
+    dayLengthSeconds: 48,
     temperature: 20,
   })
   const [windDisplay, setWindDisplay] = useState({ dir: 0, speed: 0 })
@@ -170,22 +176,40 @@ export function SimulationCanvas({
     let lastTime = performance.now()
     let tickDebt = 0
     let lastReportedTick = -1
+    let frameCounter = 0
+    let lastSnapshotReportAt = 0
 
     const render = (time: number) => {
-      const delta = time - lastTime
+      const delta = Math.min(100, time - lastTime)
       lastTime = time
+      frameCounter += 1
+
+      const speed = clampSpeedMultiplier(speedRef.current)
+      const tickCap = maxTicksPerFrame(speed)
 
       if (!pausedRef.current) {
         tickDebt += delta
-        const speed = Math.max(speedRef.current, MIN_SPEED_MULTIPLIER)
         const tickInterval = 1000 / (TICKS_PER_SECOND * speed)
-        const maxTicksPerFrame = Math.min(50, Math.max(10, Math.ceil(speed * 10)))
+        // Cap catch-up after tab backgrounding — scales with speed so warp isn't soft-capped at 96 ticks.
+        const maxDebt = tickInterval * tickCap
+        if (tickDebt > maxDebt) tickDebt = maxDebt
+
+        const tickDeadline = performance.now() + tickTimeBudgetMs(speed)
         let ticksThisFrame = 0
-        while (tickDebt >= tickInterval && ticksThisFrame < maxTicksPerFrame) {
+        while (tickDebt >= tickInterval && ticksThisFrame < tickCap) {
           world.tick()
           tickDebt -= tickInterval
           ticksThisFrame += 1
+          // Cheap deadline check every 16 ticks — avoids perf.now() dominating at warp speeds.
+          if ((ticksThisFrame & 15) === 0 && performance.now() >= tickDeadline) break
         }
+      }
+
+      const shouldPaint =
+        pausedRef.current || frameCounter % paintEveryNFrames(speed) === 0
+      if (!shouldPaint) {
+        frameId = requestAnimationFrame(render)
+        return
       }
 
       const snapshot = world.snapshot()
@@ -224,8 +248,13 @@ export function SimulationCanvas({
         )
       }
 
-      if (snapshot.stats.tick !== lastReportedTick) {
+      const reportGap = snapshotReportIntervalMs(speed)
+      const dueReport =
+        snapshot.stats.tick !== lastReportedTick &&
+        (reportGap <= 0 || time - lastSnapshotReportAt >= reportGap || pausedRef.current)
+      if (dueReport) {
         lastReportedTick = snapshot.stats.tick
+        lastSnapshotReportAt = time
         setDayDisplay({
           label: dayNightLabel(snapshot.stats.dayPhase),
           sunlight: snapshot.stats.sunlight,

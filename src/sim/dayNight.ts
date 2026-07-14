@@ -12,7 +12,11 @@ const SEASON_BORDER_RGB: Record<SeasonName, readonly [number, number, number]> =
   winter: [88, 158, 228],
 }
 
-export const VIEWPORT_BORDER_RING_WIDTH = 6
+export const VIEWPORT_BORDER_RING_WIDTH = 14
+/** Soft depth of the night frame fade (edge → clear), same idea as the old rain vignette. */
+export const VIEWPORT_DAY_VIGNETTE_WIDTH = 120
+/** Peak edge opacity of the night vignette at midnight. */
+export const VIEWPORT_NIGHT_EDGE_ALPHA = 0.72
 
 export function dayLengthTicks(dayLengthSeconds: number): number {
   return Math.max(TICKS_PER_SECOND, Math.round(dayLengthSeconds * TICKS_PER_SECOND))
@@ -56,7 +60,7 @@ export type ViewportBorderRing = {
 /** Outermost ring — season hue (winter blue, summer orange, etc.). */
 export function computeSeasonBorder(season: SeasonName): ViewportBorderRing {
   const [r, g, b] = SEASON_BORDER_RGB[season]
-  return { r, g, b, alpha: 0.88 }
+  return { r, g, b, alpha: 0.92 }
 }
 
 function smoothstep(lo: number, hi: number, x: number): number {
@@ -65,33 +69,25 @@ function smoothstep(lo: number, hi: number, x: number): number {
   return t * t * (3 - 2 * t)
 }
 
-/** Middle ring — time of day: deep blue at night, orange at dawn/dusk, yellow by day. */
-export function computeDayBorder(_sunlight: number, dayPhase: number): ViewportBorderRing {
-  const NIGHT: [number, number, number] = [20, 34, 108]
-  const ORANGE: [number, number, number] = [255, 132, 32]
-  const DAY: [number, number, number] = [255, 210, 44]
+/**
+ * Time-of-day frame: invisible by day; dark vignette ramps in through dusk and peaks at night.
+ * Drawn like the old rain edge (thick fade toward the center), not a hard color band.
+ */
+export function computeDayBorder(sunlight: number, dayPhase: number): ViewportBorderRing {
+  // Near-black navy — reads as night shadow, not a bright "mode color".
+  const NIGHT: [number, number, number] = [6, 10, 22]
 
   const fromMidnight = Math.min(dayPhase, 1 - dayPhase)
-  const nightW = 1 - smoothstep(0.08, 0.14, fromMidnight)
-
-  const fromNoon = Math.abs(dayPhase - 0.5)
-  const dayW = (1 - smoothstep(0.14, 0.26, fromNoon)) * (1 - nightW)
-
-  let orangeW = Math.max(0, 1 - nightW - dayW)
-  const sum = nightW + orangeW + dayW || 1
-  const nw = nightW / sum
-  const ow = orangeW / sum
-  const dw = dayW / sum
-
-  const r = Math.round(nw * NIGHT[0] + ow * ORANGE[0] + dw * DAY[0])
-  const g = Math.round(nw * NIGHT[1] + ow * ORANGE[1] + dw * DAY[1])
-  const b = Math.round(nw * NIGHT[2] + ow * ORANGE[2] + dw * DAY[2])
+  // Full strength overnight; fades through dawn/dusk; fully clear once sun is up.
+  const phaseNight = 1 - smoothstep(0.1, 0.26, fromMidnight)
+  const sunNight = 1 - smoothstep(0.14, 0.48, sunlight)
+  const nightness = Math.max(phaseNight, sunNight * 0.85)
 
   return {
-    r,
-    g,
-    b,
-    alpha: 0.82 + nw * 0.12,
+    r: NIGHT[0],
+    g: NIGHT[1],
+    b: NIGHT[2],
+    alpha: nightness,
   }
 }
 
@@ -101,7 +97,6 @@ export function applyViewportAmbienceStyle(
   season: SeasonName,
   dayPhase: number,
 ): void {
-  const ringW = VIEWPORT_BORDER_RING_WIDTH
   const seasonRing = computeSeasonBorder(season)
   const dayRing = computeDayBorder(sunlight, dayPhase)
 
@@ -109,18 +104,18 @@ export function applyViewportAmbienceStyle(
   element.style.setProperty('--border-season-g', String(seasonRing.g))
   element.style.setProperty('--border-season-b', String(seasonRing.b))
   element.style.setProperty('--border-season-alpha', seasonRing.alpha.toFixed(3))
+  element.style.setProperty('--border-season-spread', `${VIEWPORT_BORDER_RING_WIDTH}px`)
 
   element.style.setProperty('--border-day-r', String(dayRing.r))
   element.style.setProperty('--border-day-g', String(dayRing.g))
   element.style.setProperty('--border-day-b', String(dayRing.b))
-  element.style.setProperty('--border-day-alpha', dayRing.alpha.toFixed(3))
+  element.style.setProperty('--border-day-width', `${VIEWPORT_DAY_VIGNETTE_WIDTH}px`)
+  element.style.setProperty('--border-day-edge-alpha', VIEWPORT_NIGHT_EDGE_ALPHA.toFixed(3))
+  // Whole vignette fades with nightness (0 = daytime, invisible).
+  element.style.setProperty('--border-day-vignette-opacity', dayRing.alpha.toFixed(3))
 
   // Rain no longer drives a global edge vignette — clouds/rain are per-tile now.
   element.style.setProperty('--border-rain-vignette-opacity', '0')
-
-  // Smallest spread sits outermost (window edge); larger spreads stack inward.
-  element.style.setProperty('--border-season-spread', `${ringW}px`)
-  element.style.setProperty('--border-day-spread', `${ringW * 2}px`)
 }
 
 /** @deprecated Use applyViewportAmbienceStyle with day phase and rain state. */

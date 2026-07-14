@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "evolve:brain": "tsx scripts/evolveBrain.ts",
-    "compare:brains": "tsx scripts/compareBrains.ts"
+    "compare:brains": "tsx scripts/compareBrains.ts",
+    "sanity:calendar": "tsx scripts/calendarSanity.ts"
   },
   "dependencies": {
     "react": "^19.2.7",

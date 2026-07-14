@@ -128,14 +128,17 @@ export function shouldHuntPreyOverPlant(
 
 export function tryEatCreature(hunter: Creature, prey: Creature): number {
   const traits = creatureTraits(hunter)
+  if (hunter.attackCooldown > 0) return 0
   const { dx, dy } = toroidalDelta(hunter, prey)
   const dist = Math.hypot(dx, dy)
   const reach = traits.radius + traits.forageReach
   if (dist > reach) return 0
 
-  const bite = Math.min(traits.biteAmount * traits.forageEfficiency, prey.energy)
+  // Per-minute clock: live bites are small wounds, not whole-body devouring each tick.
+  const bite = Math.min(traits.biteAmount * traits.forageEfficiency * 0.18, prey.energy)
   prey.energy -= bite
   markPendingDeathCause(prey, 'predation')
+  hunter.attackCooldown = Math.floor(12 + (1 - traits.aggressiveness) * 28)
   return bite
 }
 

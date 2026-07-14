@@ -196,7 +196,7 @@ export function VisualLegendPanel({ onClose }: VisualLegendPanelProps) {
               <span className="legend-temp-hot" />
             </span>
           </LegendItem>
-          <LegendItem label="Day & night" detail="Window frame (outside→in): season at edge, time of day (blue night / orange dawn-dusk / yellow day), rain when wet">
+          <LegendItem label="Day & night" detail="Window frame: season color at the edge; dark vignette fades inward toward night (invisible by day)">
             <span className="legend-day-night" aria-hidden>
               <span className="legend-day-half" />
               <span className="legend-night-half" />

@@ -6,8 +6,10 @@ import {
   GRASS_DROUGHT_DRAIN_BASE,
   GRASS_DROUGHT_DRAIN_SCALE,
   GRASS_DROWN_DRAIN_FRACTION,
+  GRASS_DROWN_MAX_TICK_LOSS_FRACTION,
   GRASS_FLOOD_DRAIN_STRESS_MAX,
   GRASS_FLOOD_DRAIN_STRESS_MIN,
+  GRASS_FLOOD_GROWTH_BLOCK_STRESS,
   GRASS_FLOOD_RAIN_STRESS_MULT,
   GRASS_EDIBLE_ENERGY,
   GRASS_EXTREME_COLD_DRAIN,
@@ -40,7 +42,7 @@ import {
   waterUnitsForGrowth,
 } from './plantWaterUptake'
 import { releaseTranspiredWater, type AtmospherePool } from './transpiration'
-import { grassSunlightWithTreeShade } from './grassTreeShade'
+import { buildTreeCanopies, grassSunlightWithCanopies, type TreeCanopy } from './grassTreeShade'
 import type { Rng } from './rng'
 import type { SeasonName } from './seasons'
 import type { TerrainWater } from './terrainWater'
@@ -345,15 +347,24 @@ export class GrassCover {
     temperature: number,
     maxCells: number,
     shadeTrees: readonly Plant[] = [],
+    terrain?: TerrainWater,
+    /** Aggregate this many sim-minutes into one turf update (world calls every N ticks with dt=N). */
+    dtTicks = 1,
   ): number {
+    const dt = Math.max(1, dtTicks)
     let primaryProduction = 0
     const beforeEnergy = this.totalEnergy()
     this.tickLossBudget.fill(0)
 
-    for (let i = 0; i < this.energy.length; i++) {
-      if (!this.dnaByCell[i]) continue
-      this.age[i] += 1
-      this.applyTemperatureStress(i, season, temperature, soil, atmosphere)
+    const canopies = buildTreeCanopies(shadeTrees)
+    const live: number[] = []
+    for (let i = 0; i < this.dnaByCell.length; i++) {
+      if (this.dnaByCell[i]) live.push(i)
+    }
+
+    for (const i of live) {
+      this.age[i] += dt
+      this.applyTemperatureStress(i, season, temperature, soil, atmosphere, dt)
       this.uptakeSoilWater(i, soil, atmosphere, season, temperature)
       primaryProduction += this.growCell(
         i,
@@ -361,14 +372,16 @@ export class GrassCover {
         sunlight,
         temperature,
         season,
-        shadeTrees,
+        canopies,
         atmosphere,
+        terrain,
+        dt,
       )
-      this.applyDrought(i, soil, atmosphere, season, temperature)
+      this.applyDrought(i, soil, atmosphere, season, temperature, dt)
     }
 
     this.cullBare(soil, atmosphere)
-    this.tickSpread(rng, soil, atmosphere, season, maxCells)
+    this.tickSpread(rng, soil, atmosphere, season, maxCells, terrain, dt)
     this.cullBare(soil, atmosphere)
 
     return Math.max(0, this.totalEnergy() - beforeEnergy) + primaryProduction
@@ -380,8 +393,10 @@ export class GrassCover {
     sunlight: number,
     temperature: number,
     season: SeasonName,
-    shadeTrees: readonly Plant[],
+    canopies: readonly TreeCanopy[],
     atmosphere: AtmospherePool,
+    terrain?: TerrainWater,
+    dtTicks = 1,
   ): number {
     const dna = this.dnaByCell[index]
     if (!dna) return 0
@@ -391,8 +406,12 @@ export class GrassCover {
 
     if (this.energy[index] <= GRASS_MIN_LIVE_ENERGY || this.energy[index] >= traits.maxEnergy) return 0
 
+    if (terrain && terrain.grassFloodStressAtCell(index) >= GRASS_FLOOD_GROWTH_BLOCK_STRESS) {
+      return 0
+    }
+
     const { x, y } = this.cellCenter(index)
-    const localSunlight = grassSunlightWithTreeShade(x, y, sunlight, shadeTrees)
+    const localSunlight = grassSunlightWithCanopies(x, y, sunlight, canopies)
     if (localSunlight <= 0 || dormant) return 0
 
     const moisture = soil.sample(x, y)
@@ -409,7 +428,8 @@ export class GrassCover {
       localSunlight *
       tempFactor *
       seasonal *
-      GRASS_TURF_GROWTH_SCALE
+      GRASS_TURF_GROWTH_SCALE *
+      dtTicks
     if (potentialGrowth <= 0) return 0
 
     // Only pull soil water for biomass that fits; unused pull was vanishing from the totals.
@@ -452,7 +472,7 @@ export class GrassCover {
     atmosphere: AtmospherePool,
   ): void {
     if (fraction <= 0 || this.energy[index] <= GRASS_MIN_LIVE_ENERGY) return
-    this.applyBiomassLoss(index, Math.min(GRASS_MAX_TICK_LOSS_FRACTION, fraction), soil, atmosphere)
+    this.applyBiomassLoss(index, Math.min(GRASS_DROWN_MAX_TICK_LOSS_FRACTION, fraction), soil, atmosphere)
   }
 
   private applyBiomassLoss(
@@ -490,6 +510,7 @@ export class GrassCover {
     temperature: number,
     soil: SoilAccess,
     atmosphere: AtmospherePool,
+    dtTicks = 1,
   ): void {
     const dna = this.dnaByCell[index]
     if (!dna || this.energy[index] <= GRASS_MIN_LIVE_ENERGY) return
@@ -508,16 +529,16 @@ export class GrassCover {
         this.coldTicks[index] = 0
         return
       }
-      this.coldTicks[index] += 1
+      this.coldTicks[index] += dtTicks
       const ramp = Math.min(1, this.coldTicks[index] / GRASS_EXTREME_COLD_KILL_TICKS)
       const hardiness = 0.35 + traits.hardiness * 0.55
       const drainFraction =
-        GRASS_EXTREME_COLD_DRAIN * ramp * ramp * Math.max(0.15, 1.2 - hardiness)
+        GRASS_EXTREME_COLD_DRAIN * ramp * ramp * Math.max(0.15, 1.2 - hardiness) * dtTicks
       this.drainBiomass(index, drainFraction, soil, atmosphere)
       return
     }
 
-    this.coldTicks[index] += 1
+    this.coldTicks[index] += dtTicks
     const span = Math.max(0.05, traits.tempSurvivalHalfWidth - traits.tempGrowthHalfWidth)
     const beyondGrowth = delta - traits.tempGrowthHalfWidth
     const severity = Math.min(1.5, beyondGrowth / span)
@@ -537,7 +558,7 @@ export class GrassCover {
       drainFraction += GRASS_COLD_EXTREME_DRAIN * extremeRamp * (1 + overshoot)
     }
 
-    this.drainBiomass(index, drainFraction, soil, atmosphere)
+    this.drainBiomass(index, drainFraction * dtTicks, soil, atmosphere)
   }
 
   private applyDrought(
@@ -546,6 +567,7 @@ export class GrassCover {
     atmosphere: AtmospherePool,
     season: SeasonName,
     temperature: number,
+    dtTicks = 1,
   ): void {
     const dna = this.dnaByCell[index]
     if (!dna || this.energy[index] <= GRASS_MIN_LIVE_ENERGY) return
@@ -565,7 +587,7 @@ export class GrassCover {
       return
     }
 
-    this.droughtTicks[index] += 1
+    this.droughtTicks[index] += dtTicks
     const ramp = 1 + Math.min(3, this.droughtTicks[index] / 75)
     const severity =
       moistureFactor < safeMoisture * 0.35
@@ -577,7 +599,8 @@ export class GrassCover {
       severity *
       ramp *
       (GRASS_DROUGHT_DRAIN_BASE + thirst * GRASS_DROUGHT_DRAIN_SCALE) *
-      Math.max(0.15, 1.05 - droughtTolerance)
+      Math.max(0.15, 1.05 - droughtTolerance) *
+      dtTicks
 
     this.drainBiomass(index, drainFraction, soil, atmosphere)
   }
@@ -632,11 +655,13 @@ export class GrassCover {
     atmosphere: AtmospherePool,
     season: SeasonName,
     maxCells: number,
+    terrain?: TerrainWater,
+    dtTicks = 1,
   ): void {
     const occupied = this.countEdible()
     if (occupied >= maxCells) return
 
-    const attempts = this.spreadAttempts(occupied, season)
+    const attempts = Math.max(1, Math.round(this.spreadAttempts(occupied, season) * dtTicks))
     const occupiedIndices: number[] = []
     for (let i = 0; i < this.energy.length; i++) {
       if (this.hasGrass(i)) occupiedIndices.push(i)
@@ -650,7 +675,9 @@ export class GrassCover {
 
       const parentIdx = this.pickSpreadParent(rng, occupiedIndices)
       if (spreadParentsThisTick.has(parentIdx)) continue
-      if (!this.rngChance(rng, this.reproductionChance(parentIdx, season))) continue
+      // Scale chance for multi-tick batches without exploding offspring.
+      const chance = Math.min(1, this.reproductionChance(parentIdx, season) * dtTicks)
+      if (!this.rngChance(rng, chance)) continue
 
       const parentDna = this.dnaByCell[parentIdx]
       if (!parentDna) continue
@@ -670,6 +697,9 @@ export class GrassCover {
       const neighborIdx = this.pickNeighborIndex(rng, parentIdx)
       if (neighborIdx < 0) continue
       if (this.occupiesTile(neighborIdx)) continue
+      if (terrain && terrain.grassFloodStressAtCell(neighborIdx) >= GRASS_FLOOD_GROWTH_BLOCK_STRESS) {
+        continue
+      }
       // Trace turf dying back can be reclaimed — return its residual water first.
       if (this.dnaByCell[neighborIdx]) this.releaseDeadWater(neighborIdx, soil, atmosphere)
 
@@ -759,16 +789,18 @@ export class GrassCover {
     soil: SoilAccess,
     atmosphere: AtmospherePool,
     raining = false,
+    dtTicks = 1,
   ): void {
-    for (let i = 0; i < this.energy.length; i++) {
-      if (!this.isLiveTurf(i)) continue
+    const dt = Math.max(1, dtTicks)
+    for (let i = 0; i < this.dnaByCell.length; i++) {
+      if (!this.dnaByCell[i] || !this.isLiveTurf(i)) continue
       let stress = terrain.grassFloodStressAtCell(i)
       if (stress <= 0) continue
       if (raining) stress *= GRASS_FLOOD_RAIN_STRESS_MULT
       const stressMult =
         GRASS_FLOOD_DRAIN_STRESS_MIN +
         stress * (GRASS_FLOOD_DRAIN_STRESS_MAX - GRASS_FLOOD_DRAIN_STRESS_MIN)
-      this.drainBiomassDirect(i, GRASS_DROWN_DRAIN_FRACTION * stressMult, soil, atmosphere)
+      this.drainBiomassDirect(i, GRASS_DROWN_DRAIN_FRACTION * stressMult * dt, soil, atmosphere)
     }
   }
 

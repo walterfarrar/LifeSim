@@ -18,7 +18,7 @@ export function ExpressedTraitsList({ traits, attackCooldown }: ExpressedTraitsL
       <div><dt>Metabolism</dt><dd>{fmt(traits.metabolism, 3)}</dd></div>
       <div><dt>Vision</dt><dd>{fmt(traits.vision, 0)}</dd></div>
       <div><dt>Repro threshold</dt><dd>{fmt(traits.reproThreshold, 0)}</dd></div>
-      <div><dt>Max age</dt><dd>{formatYears(traits.maxAge)}</dd></div>
+      <div><dt>Vigor prime</dt><dd>{formatYears(traits.maxAge)}</dd></div>
       <div><dt>Forage efficiency</dt><dd>{fmt(traits.forageEfficiency, 2)}</dd></div>
       <div><dt>Offspring gift</dt><dd>{fmt(traits.offspringGift, 2)}</dd></div>
       <div><dt>Color</dt><dd>hsl({fmt(traits.hue, 0)}, {fmt(traits.saturation, 0)}%, {fmt(traits.lightness, 0)}%)</dd></div>
@@ -36,8 +36,8 @@ export function ExpressedTraitsList({ traits, attackCooldown }: ExpressedTraitsL
       <div><dt>Mate range</dt><dd>{fmt(traits.mateRange, 1)}</dd></div>
       <div><dt>Sleep mobility</dt><dd>{fmt(traits.sleepMobility, 2)}</dd></div>
       <div><dt>Explore vision</dt><dd>{fmt(traits.exploreVisionMult, 2)}×</dd></div>
-      <div><dt>Mode commitment</dt><dd>{fmt(traits.modeCommitment, 0)} ticks</dd></div>
-      <div><dt>Wanderlust</dt><dd>{fmt(traits.wanderDurationMin, 0)}–{fmt(traits.wanderDurationMin + traits.wanderDurationSpan, 0)}</dd></div>
+      <div><dt>Mode commitment</dt><dd>{formatYears(traits.modeCommitment)}</dd></div>
+      <div><dt>Wanderlust</dt><dd>{formatYears(traits.wanderDurationMin)}–{formatYears(traits.wanderDurationMin + traits.wanderDurationSpan)}</dd></div>
       <div><dt>Birth reserve</dt><dd>{fmt(traits.birthEnergyReserve, 2)}</dd></div>
       <div><dt>Maturation age</dt><dd>{formatYears(traits.maturationAge)}</dd></div>
       <div><dt>Gestation</dt><dd>{formatYears(traits.pregnancyTicks)}</dd></div>

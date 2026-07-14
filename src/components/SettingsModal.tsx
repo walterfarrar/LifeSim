@@ -222,22 +222,22 @@ export function SettingsPanel({
               />
               <NumberField
                 label="First group delay"
-                hint="Sim-years before the first founder group appears (all creatures in that group spawn together)"
+                hint="Calendar years before the first founder group (0 = immediate). With a 365-day year, 0.03 ≈ 11 days."
                 value={draft.creatureFirstSpawnDelayYears}
                 min={MIN_CREATURE_FIRST_SPAWN_DELAY_YEARS}
                 max={MAX_CREATURE_FIRST_SPAWN_DELAY_YEARS}
-                step={1}
+                step={0.01}
                 onChange={(creatureFirstSpawnDelayYears) =>
                   onChange(patch(draft, { creatureFirstSpawnDelayYears }))
                 }
               />
               <NumberField
                 label="Group spawn interval"
-                hint="Sim-years between each founder group (every creature in a group appears at once)"
+                hint="Calendar years between founder groups (default ≈1½ weeks). Keep small so waits stay playable on a 365-day year."
                 value={draft.creatureGroupSpawnIntervalYears}
                 min={MIN_CREATURE_GROUP_SPAWN_INTERVAL_YEARS}
                 max={MAX_CREATURE_GROUP_SPAWN_INTERVAL_YEARS}
-                step={1}
+                step={0.01}
                 onChange={(creatureGroupSpawnIntervalYears) =>
                   onChange(patch(draft, { creatureGroupSpawnIntervalYears }))
                 }
@@ -381,19 +381,19 @@ export function SettingsPanel({
               />
               <NumberField
                 label="Day length"
-                hint="Equinox day–night cycle at 1× speed; longer in summer, shorter in winter"
+                hint="Equinox day–night cycle at 1× speed (real seconds). At 30 ticks/s, 48s ≈ 1440 ticks (one tick per sim-minute). Longer in summer, shorter in winter."
                 value={draft.dayLengthSeconds}
                 min={6}
-                max={180}
+                max={480}
                 step={1}
                 onChange={(dayLengthSeconds) => onChange(patch(draft, { dayLengthSeconds }))}
               />
               <NumberField
                 label="Days per year"
-                hint="Day–night cycles per season year (spring → summer → autumn → winter)"
+                hint="Day–night cycles per season year (spring → summer → autumn → winter). Use 365 for a full calendar year."
                 value={draft.daysPerSeasonYear}
-                min={4}
-                max={24}
+                min={1}
+                max={365}
                 step={1}
                 onChange={(daysPerSeasonYear) => onChange(patch(draft, { daysPerSeasonYear }))}
               />

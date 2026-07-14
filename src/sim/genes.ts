@@ -146,6 +146,7 @@ export type HerbivoreTraits = {
   metabolism: number
   vision: number
   reproThreshold: number
+  /** Soft senescence prime in ticks — frailty ramps after this; no hard death. */
   maxAge: number
   forageEfficiency: number
   offspringGift: number

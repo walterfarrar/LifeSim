@@ -712,49 +712,52 @@ button:hover {
   --border-rain-width: 128px;
   --border-rain-edge-alpha: 0.58;
   --border-rain-vignette-opacity: 0;
-  --border-day-r: 255;
-  --border-day-g: 210;
-  --border-day-b: 44;
-  --border-day-alpha: 0.85;
-  --border-day-spread: 12px;
+  --border-day-r: 6;
+  --border-day-g: 10;
+  --border-day-b: 22;
+  --border-day-width: 120px;
+  --border-day-edge-alpha: 0.72;
+  --border-day-vignette-opacity: 0;
   --border-season-r: 118;
   --border-season-g: 198;
   --border-season-b: 132;
-  --border-season-alpha: 0.88;
-  --border-season-spread: 6px;
+  --border-season-alpha: 0.92;
+  --border-season-spread: 14px;
 }
 
+/* Night / dusk frame — same thick edge-fade as the old rain vignette; invisible by day. */
 .canvas-viewport::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
-  opacity: var(--border-rain-vignette-opacity);
-  transition: opacity 0.35s ease;
+  opacity: var(--border-day-vignette-opacity);
+  transition: opacity 0.45s ease;
   background:
     linear-gradient(
       to right,
-      rgba(var(--border-rain-r), var(--border-rain-g), var(--border-rain-b), var(--border-rain-edge-alpha)),
-      transparent var(--border-rain-width)
+      rgba(var(--border-day-r), var(--border-day-g), var(--border-day-b), var(--border-day-edge-alpha)),
+      transparent var(--border-day-width)
     ),
     linear-gradient(
       to left,
-      rgba(var(--border-rain-r), var(--border-rain-g), var(--border-rain-b), var(--border-rain-edge-alpha)),
-      transparent var(--border-rain-width)
+      rgba(var(--border-day-r), var(--border-day-g), var(--border-day-b), var(--border-day-edge-alpha)),
+      transparent var(--border-day-width)
     ),
     linear-gradient(
       to bottom,
-      rgba(var(--border-rain-r), var(--border-rain-g), var(--border-rain-b), var(--border-rain-edge-alpha)),
-      transparent var(--border-rain-width)
+      rgba(var(--border-day-r), var(--border-day-g), var(--border-day-b), var(--border-day-edge-alpha)),
+      transparent var(--border-day-width)
     ),
     linear-gradient(
       to top,
-      rgba(var(--border-rain-r), var(--border-rain-g), var(--border-rain-b), var(--border-rain-edge-alpha)),
-      transparent var(--border-rain-width)
+      rgba(var(--border-day-r), var(--border-day-g), var(--border-day-b), var(--border-day-edge-alpha)),
+      transparent var(--border-day-width)
     );
 }
 
+/* Season color at the window edge (thicker hard band + soft inner wash). */
 .canvas-viewport::after {
   content: '';
   position: absolute;
@@ -764,10 +767,8 @@ button:hover {
   box-shadow:
     inset 0 0 0 var(--border-season-spread)
       rgba(var(--border-season-r), var(--border-season-g), var(--border-season-b), var(--border-season-alpha)),
-    inset 0 0 0 var(--border-day-spread)
-      rgba(var(--border-day-r), var(--border-day-g), var(--border-day-b), var(--border-day-alpha)),
-    inset 0 0 32px
-      rgba(var(--border-season-r), var(--border-season-g), var(--border-season-b), calc(var(--border-season-alpha) * 0.14));
+    inset 0 0 48px
+      rgba(var(--border-season-r), var(--border-season-g), var(--border-season-b), calc(var(--border-season-alpha) * 0.16));
 }
 
 .canvas-viewport:active {

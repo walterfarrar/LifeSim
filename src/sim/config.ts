@@ -13,16 +13,24 @@ export const WORLD_HEIGHT = DEFAULT_WORLD_HEIGHT
 
 export const TICKS_PER_SECOND = 30
 
+/** One simulation tick equals this many in-world minutes. */
+export const MINUTES_PER_TICK = 1
+/** In-world day length in ticks (24h × 60min at {@link MINUTES_PER_TICK}). */
+export const TICKS_PER_DAY = (24 * 60) / MINUTES_PER_TICK
+/** Calendar year length in ticks (365 days). */
+export const TICKS_PER_YEAR = 365 * TICKS_PER_DAY
+export const TICKS_PER_HOUR = 60 / MINUTES_PER_TICK
+
 export const INITIAL_PLANTS = 650
 export const INITIAL_HERBIVORES = 40
-/** Sim-years before the first founder group appears at world start. */
-export const CREATURE_FIRST_SPAWN_DELAY_YEARS = 10
-/** Sim-years between each founder group introduction (and post-cycle extinction checks). */
-export const CREATURE_GROUP_SPAWN_INTERVAL_YEARS = 50
+/** Calendar years before the first founder group appears at world start. */
+export const CREATURE_FIRST_SPAWN_DELAY_YEARS = 0
+/** Calendar years between founder group introductions (≈1½ weeks). */
+export const CREATURE_GROUP_SPAWN_INTERVAL_YEARS = 0.03
 export const MIN_CREATURE_FIRST_SPAWN_DELAY_YEARS = 0
-export const MAX_CREATURE_FIRST_SPAWN_DELAY_YEARS = 200
-export const MIN_CREATURE_GROUP_SPAWN_INTERVAL_YEARS = 1
-export const MAX_CREATURE_GROUP_SPAWN_INTERVAL_YEARS = 200
+export const MAX_CREATURE_FIRST_SPAWN_DELAY_YEARS = 2
+export const MIN_CREATURE_GROUP_SPAWN_INTERVAL_YEARS = 0.01
+export const MAX_CREATURE_GROUP_SPAWN_INTERVAL_YEARS = 1
 export const MAX_PLANTS = 1600
 export const MAX_GRASS_PLANTS = 1200
 export const MAX_BUSH_PLANTS = 200
@@ -265,7 +273,7 @@ export const PLANT_LIVE_UPTAKE_DORMANT_SCALE = 0.14
 /** Grass turf is grazed in small mouthfuls — fraction of a normal plant bite per tick. */
 export const GRASS_GRAZE_BITE_SCALE = 0.058
 /** Turf regrowth multiplier applied on top of plant DNA growth rate. */
-export const GRASS_TURF_GROWTH_SCALE = 0.18
+export const GRASS_TURF_GROWTH_SCALE = 0.22
 /** How many herbivores may graze the same grass cell in one tick (prevents pile-on clears). */
 export const GRASS_GRAZE_MAX_PER_CELL_PER_TICK = 2
 /** Digestible energy from grass biomass vs woody plants (filler browse, not a staple). */
@@ -280,8 +288,8 @@ export const GRASS_WATER_PREFERENCE = 0.06
 export const GRASS_MIN_LIVE_ENERGY = 0.05
 /** Minimum biomass to graze or count as a full food tile. */
 export const GRASS_EDIBLE_ENERGY = 0.5
-/** Cap on passive biomass loss per cell per tick (stress, drought, flood). */
-export const GRASS_MAX_TICK_LOSS_FRACTION = 0.045
+/** Cap on passive biomass loss per cell per tick (stress, drought — flood uses GRASS_DROWN_MAX_TICK_LOSS_FRACTION). */
+export const GRASS_MAX_TICK_LOSS_FRACTION = 0.008
 /** Turf crown height as a fraction of cell size (flood stress and rendering). */
 export const GRASS_TURF_HEIGHT_FRAC = 0.22
 /** Standing water below this fraction of crown height does not stress turf (rain film). */
@@ -289,32 +297,36 @@ export const GRASS_FLOOD_SUBMERGE_FREE_FRAC = 0.5
 /** Flood damage multiplier while it is raining (thin surface layer is tolerated). */
 export const GRASS_FLOOD_RAIN_STRESS_MULT = 0.35
 /** Fraction of biomass lost per tick when fully flooded (shallow film uses GRASS_FLOOD_DRAIN_STRESS_MIN). */
-export const GRASS_DROWN_DRAIN_FRACTION = 0.009
+export const GRASS_DROWN_DRAIN_FRACTION = 0.006
 /** Minimum stress multiplier when turf is barely submerged past the crown. */
-export const GRASS_FLOOD_DRAIN_STRESS_MIN = 0.1
+export const GRASS_FLOOD_DRAIN_STRESS_MIN = 0.35
 /** Maximum stress multiplier when water fully covers and fills a depressed tile. */
 export const GRASS_FLOOD_DRAIN_STRESS_MAX = 3.5
-export const GRASS_DROUGHT_DRAIN_BASE = 0.0018
-export const GRASS_DROUGHT_DRAIN_SCALE = 0.007
+export const GRASS_DROUGHT_DRAIN_BASE = 0.00009
+export const GRASS_DROUGHT_DRAIN_SCALE = 0.00035
 /** Fraction of turf biomass lost per tick when active but outside the growth temperature band. */
-export const GRASS_COLD_DRAIN_BASE = 0.002
-export const GRASS_COLD_DRAIN_SCALE = 0.008
-/** Ticks of stress before extreme-temperature drain reaches full strength. */
-export const GRASS_COLD_RAMP_TICKS = 240
-/** Ticks beyond survival limits before lethal freeze/heat damage ramps up. */
-export const GRASS_EXTREME_COLD_KILL_TICKS = 600
+export const GRASS_COLD_DRAIN_BASE = 0.0001
+export const GRASS_COLD_DRAIN_SCALE = 0.0004
+/** Ticks of stress before extreme-temperature drain reaches full strength (~2 days). */
+export const GRASS_COLD_RAMP_TICKS = 2880
+/** Ticks beyond survival limits before lethal freeze/heat damage ramps up (~5 days). */
+export const GRASS_EXTREME_COLD_KILL_TICKS = 7200
 /** Max fraction of biomass lost per tick under prolonged lethal temperatures. */
-export const GRASS_COLD_EXTREME_DRAIN = 0.035
+export const GRASS_COLD_EXTREME_DRAIN = 0.002
 /** Crown freeze while dormant but beyond survival — very slow unless extreme persists. */
-export const GRASS_EXTREME_COLD_DRAIN = 0.002
+export const GRASS_EXTREME_COLD_DRAIN = 0.00008
+/** Flood stress above this stops turf photosynthesis (growth cannot outrun drowning). */
+export const GRASS_FLOOD_GROWTH_BLOCK_STRESS = 0.35
+/** Cap on flood/drowning biomass loss per cell per tick (must beat typical growth). */
+export const GRASS_DROWN_MAX_TICK_LOSS_FRACTION = 0.02
 /** Tree canopy shade on turf — radius multiplier and peak block at trunk center. */
 export const TREE_CANOPY_SHADE_RADIUS_SCALE = 1.2
 export const TREE_CANOPY_MAX_SHADE = 0.92
 /** Conifers resist browsing — extra virtual hardiness and smaller bites. */
 export const TREE_BITE_HARDINESS_OFFSET = 0.45
 export const TREE_GRAZE_BITE_SCALE = 0.22
-/** Drowning and drought resilience vs bushes. */
-export const DROWN_TREE_DAMAGE_SCALE = 0.38
+/** Drowning resilience vs bushes — trees still die underwater within about a day. */
+export const DROWN_TREE_DAMAGE_SCALE = 0.55
 /** Water released to soil vs air when a creature or plant dies. */
 export const DEATH_WATER_TO_SOIL = 0.1
 export const DEATH_WATER_TO_AIR = 0.9
@@ -327,21 +339,30 @@ export const POND_SEEP_REACH = 480
 /** Fraction of neighbor moisture gap closed per tick (lower = wet spots linger longer). */
 export const SOIL_LATERAL_DIFFUSION = 0.013
 
-/** Energy drained per tick when a creature is submerged in the pond. */
-export const DROWN_CREATURE_DAMAGE = 3.4
-/** Energy drained per tick when a plant is submerged in the pond. */
-export const DROWN_PLANT_DAMAGE = 9
+/** Energy drained per tick when a creature is submerged (~day-scale to drown from a full tank). */
+export const DROWN_CREATURE_DAMAGE = 0.09
+/**
+ * Fraction of plant maxEnergy lost per tick when the stem is submerged.
+ * Growth is blocked underwater, so ~0.5% / min clears the pond in a few hours.
+ */
+export const DROWN_PLANT_ENERGY_FRAC = 0.005
+/** @deprecated Prefer {@link DROWN_PLANT_ENERGY_FRAC}; kept for import compatibility. */
+export const DROWN_PLANT_DAMAGE = 0.85
 
-/** Default real-time seconds for one full day–night cycle at 1× sim speed. */
-export const DAY_LENGTH_SECONDS = 24
+/**
+ * Real-time seconds for one sim day at 1×: {@link TICKS_PER_DAY} / {@link TICKS_PER_SECOND} = 48
+ * so each tick is one in-world minute.
+ */
+export const DAY_LENGTH_SECONDS = TICKS_PER_DAY / TICKS_PER_SECOND
 export const MIN_DAY_LENGTH_SECONDS = 6
-export const MAX_DAY_LENGTH_SECONDS = 180
+/** Allow up to ~8 sim-minutes of real time per day at 1×. */
+export const MAX_DAY_LENGTH_SECONDS = 480
 /** Day length swing at solstice vs equinox (0.38 → ±38% from base). */
 export const SEASON_DAY_LENGTH_SWING = 0.38
-/** Day–night cycles per season year (spring → summer → autumn → winter). */
-export const DAYS_PER_SEASON_YEAR = 8
-export const MIN_DAYS_PER_SEASON_YEAR = 4
-export const MAX_DAYS_PER_SEASON_YEAR = 24
+/** Day–night cycles per season year — Earth calendar by default. */
+export const DAYS_PER_SEASON_YEAR = 365
+export const MIN_DAYS_PER_SEASON_YEAR = 1
+export const MAX_DAYS_PER_SEASON_YEAR = 365
 
 /** Seasonal mean temperature swing (°C) around SEASON_TEMP_BASE. */
 export const SEASON_TEMP_BASE = 14

@@ -11,12 +11,23 @@ import {
   type PlantTraits,
 } from './genes'
 import { PLANT_KIND_TRAIT_SCALE, plantKindFromDna } from './plantKinds'
+import { TICKS_PER_YEAR, daysToTicks, hoursToTicks } from './timeScale'
 
 function shapeFromGene(value: number): CreatureShape {
   if (value < 0.25) return 'round'
   if (value < 0.5) return 'oval'
   if (value < 0.75) return 'square'
   return 'triangle'
+}
+
+/**
+ * Soft senescence frailty: 0 until the MaxAge gene “prime”, then ramps toward 1.
+ * No hard death — raises metabolism / thirst / disease vulnerability only.
+ */
+export function senescenceFrailty(age: number, primeTicks: number): number {
+  if (primeTicks <= 0 || age <= primeTicks) return 0
+  const ramp = Math.max(primeTicks, TICKS_PER_YEAR)
+  return Math.min(1, (age - primeTicks) / ramp)
 }
 
 /** Map raw DNA to expressed traits — keep all balance knobs here. */
@@ -31,12 +42,18 @@ export function expressHerbivore(dna: DNA): HerbivoreTraits {
   const radius = 3 + size * 7
 
   return {
-    speed: 0.4 + g(HerbivoreGene.Speed) * 2.2,
+    /**
+     * px/tick (= px/min). Floor raised after the calendar refactor so even slow genotypes
+     * can usually reach a pond shore before thirst death on the default map.
+     */
+    speed: 0.6 + g(HerbivoreGene.Speed) * 2.5,
     radius,
-    metabolism: 0.05 + g(HerbivoreGene.Metabolism) * 0.22,
+    /** Per-minute burn — mid genes empty a ~155 tank over roughly a day–night with some eating. */
+    metabolism: 0.035 + g(HerbivoreGene.Metabolism) * 0.14,
     vision: 35 + g(HerbivoreGene.Vision) * 130,
     reproThreshold: 55 + g(HerbivoreGene.ReproThreshold) * 90,
-    maxAge: 800 + g(HerbivoreGene.MaxAge) * 2400,
+    /** Soft senescence prime (~2 months – ~4 years); not a hard lifespan ceiling. */
+    maxAge: daysToTicks(60) + g(HerbivoreGene.MaxAge) * (daysToTicks(365 * 4) - daysToTicks(60)),
     forageEfficiency,
     offspringGift: 0.15 + g(HerbivoreGene.OffspringGift) * 0.25,
     hue: g(HerbivoreGene.Hue) * 360,
@@ -49,26 +66,32 @@ export function expressHerbivore(dna: DNA): HerbivoreTraits {
     satietyBuffer: 0.12 + g(HerbivoreGene.SatietyBuffer) * 0.2,
     minSleepEnergyRatio: 0.12 + (1 - g(HerbivoreGene.SleepNeed)) * 0.18,
     sleepFatigueThreshold: 145 - g(HerbivoreGene.SleepNeed) * 85,
-    awakeFatigueGain: 0.2 + g(HerbivoreGene.FatigueRate) * 0.45,
-    sleepFatigueRecovery: 1.0 + g(HerbivoreGene.SleepRecovery) * 2.0,
-    sleepEnergyRecovery: 0.05 + g(HerbivoreGene.SleepRecovery) * 0.18,
+    /** Full day of activity before sleep for mid genes (~16–22h awake). */
+    awakeFatigueGain: 0.04 + g(HerbivoreGene.FatigueRate) * 0.08,
+    /** Several hours of sleep to clear a day’s fatigue. */
+    sleepFatigueRecovery: 0.25 + g(HerbivoreGene.SleepRecovery) * 0.55,
+    sleepEnergyRecovery: 0.02 + g(HerbivoreGene.SleepRecovery) * 0.08,
     libido,
-    maturationAge: 30 + g(HerbivoreGene.Maturation) * 110,
-    pregnancyTicks: 80 + g(HerbivoreGene.Gestation) * 180,
+    /** ~2 weeks – ~6 months. */
+    maturationAge: daysToTicks(14) + g(HerbivoreGene.Maturation) * daysToTicks(166),
+    /** ~7–40 days. */
+    pregnancyTicks: daysToTicks(7) + g(HerbivoreGene.Gestation) * daysToTicks(33),
     maxEnergy: 110 + g(HerbivoreGene.MaxEnergy) * 90,
     /** ~one soil tile of water (7–13); kept on MaxEnergy so larger bodies still hold a bit more. */
     maxHydration: 7 + g(HerbivoreGene.MaxEnergy) * 6,
-    /** Scaled with the small tank so lifetime-to-thirst stays similar to the old 110–200 tanks. */
+    /** Scaled with the small tank so lifetime-to-thirst stays roughly one waking day mid-gene. */
     thirstDehydration: 0.004 + g(HerbivoreGene.Metabolism) * 0.012,
-    reproCooldown: 60 + g(HerbivoreGene.ReproCooldown) * 180,
+    /** ~3–20 days. */
+    reproCooldown: daysToTicks(3) + g(HerbivoreGene.ReproCooldown) * daysToTicks(17),
     mateRange: 8 + g(HerbivoreGene.MateRange) * 16,
     sleepMobility: 0.2 + g(HerbivoreGene.SleepMobility) * 0.55,
     sleepMetabolismScale: 0.25 + g(HerbivoreGene.SleepMetabolism) * 0.55,
     biteAmount: 4 + bitePower * 16 + forageEfficiency * 14,
     forageReach: 1 + g(HerbivoreGene.ForageReach) * 7,
-    modeCommitment: 20 + g(HerbivoreGene.ModeCommitment) * 50,
-    wanderDurationMin: 30 + g(HerbivoreGene.Wanderlust) * 40,
-    wanderDurationSpan: 30 + g(HerbivoreGene.Wanderlust) * 90,
+    /** Tens of minutes–a few hours of mode stickiness (long enough to finish a task, short enough to escape danger). */
+    modeCommitment: hoursToTicks(0.2) + g(HerbivoreGene.ModeCommitment) * hoursToTicks(2.8),
+    wanderDurationMin: hoursToTicks(0.5) + g(HerbivoreGene.Wanderlust) * hoursToTicks(5),
+    wanderDurationSpan: hoursToTicks(1) + g(HerbivoreGene.Wanderlust) * hoursToTicks(10),
     exploreVisionMult: 1.2 + g(HerbivoreGene.ExploreVision) * 2.0,
     birthEnergyReserve: 0.12 + g(HerbivoreGene.BirthReserve) * 0.35,
     mateLibidoFactor: 0.15 + libido * 0.2,
@@ -101,7 +124,7 @@ export function expressHerbivore(dna: DNA): HerbivoreTraits {
     soilDrinking: 0,
     pondDrinking: 1 - g(HerbivoreGene.WaterSource),
     memorySlots: Math.floor(g(HerbivoreGene.Memory) * 6.5),
-    memoryDecay: 0.0016 * (1.3 - g(HerbivoreGene.Memory) * 0.95),
+    memoryDecay: 0.00002 * (1.3 - g(HerbivoreGene.Memory) * 0.95),
     memoryRecall: 0.06 + g(HerbivoreGene.Memory) * 0.9,
   }
 }
@@ -117,31 +140,46 @@ export function expressSex(dna: DNA): 'male' | 'female' {
 }
 
 /** Map plant DNA to growth, spread, color, and reproduction traits. */
+const plantTraitsByDna = new WeakMap<DNA, PlantTraits>()
+
 export function expressPlant(dna: DNA): PlantTraits {
+  const cached = plantTraitsByDna.get(dna)
+  if (cached) return cached
+
   const g = (gene: PlantGeneIndex) => geneValue(dna, gene)
   const maxEnergy = 35 + g(PlantGene.MaxEnergy) * 55
   const kind = plantKindFromDna(dna)
   const scale = PLANT_KIND_TRAIT_SCALE[kind]
 
-  return {
+  const traits: PlantTraits = {
     greenHue: 78 + g(PlantGene.GreenHue) * 82,
     saturation: 32 + g(PlantGene.Saturation) * 58,
     lightness: 20 + g(PlantGene.Lightness) * 30,
     maxEnergy: maxEnergy * scale.maxEnergy,
-    growthRate: (0.28 + g(PlantGene.GrowthRate) * 0.92) * scale.growthRate,
+    /**
+     * Photosynthetic refill per minute — supports grazing herds: mid genes refill a tank in
+     * a few hours; kind scales differentiate grass vs woody leafiness.
+     */
+    growthRate: (0.04 + g(PlantGene.GrowthRate) * 0.12) * scale.growthRate,
     spreadMin: (14 + g(PlantGene.SpreadMin) * 55) * scale.spread,
     spreadMax: (55 + g(PlantGene.SpreadMax) * 110) * scale.spread,
-    maturationAge: (60 + g(PlantGene.Maturation) * 420) * scale.maturation,
-    spreadAgeBonus: (80 + g(PlantGene.SpreadMax) * 180) * scale.spread,
-    reproductionRate: (0.45 + g(PlantGene.Reproduction) * 1.55) * scale.reproduction,
+    /** Woody: months–years; grass kind scale brings this down to days–months. */
+    maturationAge: (daysToTicks(20) + g(PlantGene.Maturation) * daysToTicks(700)) * scale.maturation,
+    spreadAgeBonus: (daysToTicks(10) + g(PlantGene.SpreadMax) * daysToTicks(120)) * scale.spread,
+    /** Seed/vegetative reproduction attempts — hours–days scale, kind-multiplied. */
+    reproductionRate: (0.0008 + g(PlantGene.Reproduction) * 0.0035) * scale.reproduction,
     baseRadius: (2.5 + g(PlantGene.BaseRadius) * 4.5) * scale.radius,
     radiusEnergyScale: (2.5 + g(PlantGene.BaseRadius) * 6) * scale.radiusEnergy,
     mutationRate: 0.0008 + g(PlantGene.MutationRate) * 0.018,
     mutationAmount: 1 + Math.floor(g(PlantGene.MutationAmount) * 8),
     hardiness: g(PlantGene.Hardiness),
     moistureNeed: g(PlantGene.MoistureNeed),
+    /** Ecological hard ceiling: years–decades after kind lifespan scale. */
     maxAge:
-      (320 + g(PlantGene.Maturation) * 1200 + g(PlantGene.Hardiness) * 800) * scale.lifespan,
+      (daysToTicks(120) +
+        g(PlantGene.Maturation) * daysToTicks(365 * 12) +
+        g(PlantGene.Hardiness) * daysToTicks(365 * 8)) *
+      scale.lifespan,
     idealTemp: 4 + g(PlantGene.TempPreference) * 32,
     tempGrowthHalfWidth: 2 + g(PlantGene.TempGrowthRange) * 14,
     tempSurvivalHalfWidth:
@@ -150,6 +188,8 @@ export function expressPlant(dna: DNA): PlantTraits {
       1 +
       g(PlantGene.TempSurvivalRange) * 12,
   }
+  plantTraitsByDna.set(dna, traits)
+  return traits
 }
 
 export function plantFillStyle(

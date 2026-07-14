@@ -19,13 +19,14 @@ import { createRandomHerbivoreDNA } from '../herbivoreBudget'
 import { TREE_GRAZE_BITE_SCALE } from '../config'
 import { plantBiteEffectiveness } from '../foraging'
 import { plantKindFromDna } from '../plantKinds'
-import { expressCreatureTraits, expressSex } from '../phenotype'
+import { expressCreatureTraits, expressSex, senescenceFrailty } from '../phenotype'
 import { computeInbreedingLoad } from '../inbreeding'
 import type { Rng } from '../rng'
 import { toroidalDelta, toroidalDistance } from '../toroidal'
 import type { Creature, Plant, Vec2 } from '../types'
 import { getWorldBounds } from '../worldBounds'
 import { creatureSweatLoss } from '../waterCycle'
+import { hoursToTicks } from '../timeScale'
 import { plantTraits } from './plant'
 
 export { toroidalDelta, toroidalDistance } from '../toroidal'
@@ -127,9 +128,11 @@ export function applyMetabolism(
 ): number {
   const traits = creatureTraits(creature)
   const metabolismScale = creature.mode === 'sleepy' ? traits.sleepMetabolismScale : 1
-  creature.energy -= traits.metabolism * metabolismScale
+  const frailty = senescenceFrailty(creature.age, traits.maxAge)
+  const frailtyScale = 1 + frailty * 0.85
+  creature.energy -= traits.metabolism * metabolismScale * frailtyScale
   const sweatRate = creatureSweatLoss(
-    traits.thirstDehydration * metabolismScale,
+    traits.thirstDehydration * metabolismScale * frailtyScale,
     tempC,
     relativeHumidity,
     raining,
@@ -402,8 +405,7 @@ function consolidatedBrainDna(creature: Creature): BrainDNA {
 }
 
 export function isAlive(creature: Creature): boolean {
-  const traits = creatureTraits(creature)
-  return creature.energy > 0 && creature.hydration > 0 && creature.age < traits.maxAge
+  return creature.energy > 0 && creature.hydration > 0
 }
 
 export function distance(a: Vec2, b: Vec2): number {
@@ -436,10 +438,10 @@ export function tryAttackCreature(attacker: Creature, victim: Creature): boolean
   const dist = toroidalDistance(attacker, victim)
   if (dist > traits.attackRange) return false
 
-  const damage = traits.attackDamage * (0.55 + traits.aggressiveness * 0.45)
+  const damage = traits.attackDamage * (0.55 + traits.aggressiveness * 0.45) * 0.28
   victim.energy -= damage
   markPendingDeathCause(victim, 'combat')
   attacker.energy -= damage * 0.12
-  attacker.attackCooldown = Math.floor(10 + (1 - traits.aggressiveness) * 22)
+  attacker.attackCooldown = Math.floor(hoursToTicks(0.25) + (1 - traits.aggressiveness) * hoursToTicks(1.5))
   return true
 }

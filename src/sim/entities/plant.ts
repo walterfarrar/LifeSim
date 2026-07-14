@@ -1,4 +1,4 @@
-import { DROWN_PLANT_DAMAGE, DROWN_TREE_DAMAGE_SCALE, PLANT_WATER_PER_ENERGY, SOIL_CELL_WATER_CAPACITY } from '../config'
+import { DROWN_PLANT_ENERGY_FRAC, DROWN_TREE_DAMAGE_SCALE, PLANT_WATER_PER_ENERGY, SOIL_CELL_WATER_CAPACITY } from '../config'
 import { cloneDNA } from '../dna'
 import { energyFromPlantBiomass } from '../energyEconomy'
 import { normalizePlantGenes } from '../genomeNormalize'
@@ -235,8 +235,8 @@ export function applyPlantTemperature(plant: Plant, temperature: number, season:
 }
 
 /** Plants age every tick regardless of growth conditions. */
-export function applyPlantAging(plant: Plant): void {
-  plant.age += 1
+export function applyPlantAging(plant: Plant, dtTicks = 1): void {
+  plant.age += dtTicks
 }
 
 export function applyPlantOldAge(plant: Plant): void {
@@ -400,10 +400,20 @@ export function isPlantEdible(plant: Plant): boolean {
 }
 
 export function plantDrownDamage(plant: Plant): number {
-  if (plantKindFromDna(plant.dna) === 'tree') {
-    return DROWN_PLANT_DAMAGE * DROWN_TREE_DAMAGE_SCALE
-  }
-  return DROWN_PLANT_DAMAGE
+  const traits = plantTraits(plant)
+  const frac =
+    plantKindFromDna(plant.dna) === 'tree'
+      ? DROWN_PLANT_ENERGY_FRAC * DROWN_TREE_DAMAGE_SCALE
+      : DROWN_PLANT_ENERGY_FRAC
+  return Math.max(0.05, traits.maxEnergy * frac)
+}
+
+/**
+ * Stem/root radius for drowning checks — canopy size must not grant lake immunity.
+ */
+export function plantDrownRadius(plant: Plant): number {
+  const traits = plantTraits(plant)
+  return Math.max(2.5, traits.baseRadius * 0.55)
 }
 
 export function plantRadius(plant: Plant): number {

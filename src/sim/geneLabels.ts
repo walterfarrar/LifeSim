@@ -6,7 +6,7 @@ export const HERBIVORE_GENE_LABELS: Record<number, string> = {
   [HerbivoreGene.Metabolism]: 'Metabolism',
   [HerbivoreGene.Vision]: 'Vision',
   [HerbivoreGene.ReproThreshold]: 'Repro threshold',
-  [HerbivoreGene.MaxAge]: 'Max age',
+  [HerbivoreGene.MaxAge]: 'Vigor prime',
   [HerbivoreGene.ForageEfficiency]: 'Forage efficiency',
   [HerbivoreGene.OffspringGift]: 'Offspring gift',
   [HerbivoreGene.Hue]: 'Hue',
@@ -65,7 +65,8 @@ export const HERBIVORE_GENE_DESCRIPTIONS: Record<number, string> = {
   [HerbivoreGene.Metabolism]: 'Energy burned every tick while awake. High metabolism needs constant eating.',
   [HerbivoreGene.Vision]: 'Detection range for plants, mates, prey, and nearby creatures.',
   [HerbivoreGene.ReproThreshold]: 'Minimum energy required before the creature can enter mating or pregnancy.',
-  [HerbivoreGene.MaxAge]: 'Maximum lifespan. When age exceeds this, the creature dies of old age.',
+  [HerbivoreGene.MaxAge]:
+    'Age of peak vigor. After this prime, metabolism, thirst, and disease vulnerability rise gradually — there is no hard max-age death.',
   [HerbivoreGene.ForageEfficiency]: 'Energy gained per bite of plant. Works with bite power to determine harvest amount.',
   [HerbivoreGene.OffspringGift]: 'Energy transferred to a newborn at birth — a head start for the next generation.',
   [HerbivoreGene.Hue]: 'Body color on the hue wheel (0–360°). Also used when comparing dissimilarity for predation.',

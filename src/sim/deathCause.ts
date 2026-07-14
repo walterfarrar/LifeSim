@@ -45,7 +45,6 @@ export function classifyDeathCause(creature: Creature, terrain: TerrainWater): C
   if (creature.pendingDeathCause) return creature.pendingDeathCause
 
   const traits = creatureTraits(creature)
-  if (creature.age >= traits.maxAge) return 'oldAge'
   if (creature.hydration <= 0) return 'thirst'
 
   if (creature.energy <= 0) {

@@ -5,6 +5,7 @@ import type { Rng } from '../rng'
 import { PATHOGEN_CHAMPION_CHECK_INTERVAL } from '../config'
 import type { SimSettings } from '../simSettings'
 import { pickPathogenChampionDna } from '../pathogenFounderGenomes'
+import { senescenceFrailty } from '../phenotype'
 import {
   antigenMatch,
   createPathogenFromChampionDna,
@@ -39,10 +40,10 @@ function exposureSusceptibility(
 ): number {
   const strain = pathogenTraits(pathogen)
   const match = antigenMatch(immuneProfileFromDna(creature.dna), strain.antigens)
+  const frailty = senescenceFrailty(creature.age, traits.maxAge)
+  const resistance = traits.diseaseResistance * (1 - frailty * 0.55)
   const resist =
-    traits.diseaseResistance * 0.52 +
-    match * traits.diseaseResistance * 0.28 +
-    traits.diseaseRecovery * 0.12
+    resistance * 0.52 + match * resistance * 0.28 + traits.diseaseRecovery * 0.12
   return Math.max(MIN_INFECTION_CHANCE, 1 - Math.min(0.92, resist))
 }
 
@@ -188,21 +189,26 @@ function applyInfectionHarm(creatures: Creature[], pathogens: Pathogen[]): void 
     creature.infection.ticksInfected += 1
     const traits = creatureTraits(creature)
     const strainTraits = pathogenTraits(strain)
+    const frailty = senescenceFrailty(creature.age, traits.maxAge)
+    const effectiveResistance = traits.diseaseResistance * (1 - frailty * 0.55)
     const match = antigenMatch(immuneProfileFromDna(creature.dna), strainTraits.antigens)
-    const mitigated = Math.min(0.78, traits.diseaseResistance * 0.5 + match * 0.28)
+    const mitigated = Math.min(0.78, effectiveResistance * 0.5 + match * 0.28)
 
     const effectiveSeverity = Math.max(
       MIN_SEVERITY_FLOOR,
       creature.infection.severity * (1 - mitigated),
     )
 
+    // Per-minute clock: chronic infections ramp over days, not minutes.
     const harm =
-      effectiveSeverity * strainTraits.virulence * (0.35 + creature.infection.ticksInfected * 0.002)
-    creature.energy -= harm + traits.metabolism * effectiveSeverity * 0.15
+      effectiveSeverity *
+      strainTraits.virulence *
+      (0.012 + creature.infection.ticksInfected * 0.000015)
+    creature.energy -= harm + traits.metabolism * effectiveSeverity * 0.08
     markPendingDeathCause(creature, 'disease')
 
-    if (creature.infection.ticksInfected % 40 === 0) {
-      creature.infection.severity = Math.min(1, creature.infection.severity + 0.04 * (1 - mitigated))
+    if (creature.infection.ticksInfected % 480 === 0) {
+      creature.infection.severity = Math.min(1, creature.infection.severity + 0.03 * (1 - mitigated))
     }
   }
 }
@@ -220,7 +226,7 @@ function tickRecoveries(creatures: Creature[], pathogens: Pathogen[], rng: Rng):
     const strainTraits = pathogenTraits(strain)
     const match = antigenMatch(immuneProfileFromDna(creature.dna), strainTraits.antigens)
     const recovery =
-      traits.diseaseRecovery * 0.004 + match * 0.002 + (creature.mode === 'sleepy' ? 0.002 : 0)
+      traits.diseaseRecovery * 0.006 + match * 0.003 + (creature.mode === 'sleepy' ? 0.003 : 0)
 
     creature.infection.severity -= recovery
     if (creature.infection.severity <= 0.05 && rng.chance(0.08 + traits.diseaseRecovery * 0.12)) {

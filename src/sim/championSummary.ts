@@ -2,7 +2,7 @@ import { geneValue } from './dna'
 import type { DNA } from './dna'
 import { HerbivoreGene, type HerbivoreGeneIndex, type HerbivoreTraits } from './genes'
 import type { AutoChampionRecord } from './autoChampion'
-import { formatYears } from './timeScale'
+import { daysToTicks, formatYears } from './timeScale'
 
 export type ChampionSummary = {
   archetype: string
@@ -215,12 +215,12 @@ function collectInsights(traits: HerbivoreTraits, dna: DNA): Insight[] {
     })
   }
 
-  const lifespan = highIsBetter(traits.maxAge, 2200, 1100)
-  if (lifespan > 0.45) {
+  const vigor = highIsBetter(traits.maxAge, daysToTicks(365 * 3), daysToTicks(120))
+  if (vigor > 0.45) {
     insights.push({
-      score: lifespan,
-      highlight: 'Long lifespan',
-      clause: 'lives long enough for mature adults to accumulate in the score',
+      score: vigor,
+      highlight: 'Delayed senescence',
+      clause: 'stays vigorous longer before frailty raises metabolic and disease costs',
     })
   }
 
@@ -302,12 +302,12 @@ function categoryScores(traits: HerbivoreTraits): Record<string, number> {
       highIsBetter(traits.plantHardinessBreak, 0.95, 0.45) +
       highIsBetter(traits.biteAmount, 22, 10) * 0.6,
     rapid_cycle:
-      lowIsBetter(traits.maturationAge, 45, 110) +
-      lowIsBetter(traits.pregnancyTicks, 100, 220) +
-      lowIsBetter(traits.reproCooldown, 80, 200) +
+      lowIsBetter(traits.maturationAge, daysToTicks(21), daysToTicks(120)) +
+      lowIsBetter(traits.pregnancyTicks, daysToTicks(10), daysToTicks(30)) +
+      lowIsBetter(traits.reproCooldown, daysToTicks(5), daysToTicks(14)) +
       highIsBetter(traits.libido, 0.65, 0.25) * 0.8,
     survivor:
-      highIsBetter(traits.maxAge, 2200, 1100) +
+      highIsBetter(traits.maxAge, daysToTicks(365 * 3), daysToTicks(120)) +
       highIsBetter(traits.diseaseResistance, 0.58, 0.25) +
       highIsBetter(traits.diseaseRecovery, 0.55, 0.25) * 0.8,
   }

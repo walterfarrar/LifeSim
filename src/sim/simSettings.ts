@@ -23,9 +23,9 @@ export type SimSettings = {
   worldHeight: number
   creatureGroups: number
   herbivoresPerGroup: number
-  /** Sim-years before the first founder group appears. */
+  /** Calendar years before the first founder group appears. */
   creatureFirstSpawnDelayYears: number
-  /** Sim-years between each founder group introduction. */
+  /** Calendar years between each founder group introduction. */
   creatureGroupSpawnIntervalYears: number
   initialPlants: number
   maxGrassPlants: number

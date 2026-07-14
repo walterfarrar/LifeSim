@@ -77,7 +77,7 @@ import {
   transferPlantSeedWater,
   plantPopulationSpawnAttempts,
   plantDrownDamage,
-  plantRadius,
+  plantDrownRadius,
   plantReproductionChance,
   pickPlantForReproduction,
   plantTraits,
@@ -168,7 +168,7 @@ import {
 import { tickWoodyPlantWaterUptake } from './plantWaterUptake'
 import { distributeInitialWorldWater, fundInitialCreatureHydration, fundInitialPlantStructuralWater } from './waterInit'
 import { TerrainWater } from './terrainWater'
-import { yearsToTicks } from './timeScale'
+import { yearsToTicks, setCalendarTimeScale } from './timeScale'
 import { Rng } from './rng'
 import type { Corpse, Creature, Plant, Vec2, WorldSnapshot, WorldStats } from './types'
 
@@ -251,6 +251,7 @@ export class World {
     if (settings) {
       this.settings = { ...settings }
     }
+    setCalendarTimeScale(this.settings.dayLengthSeconds, this.settings.daysPerSeasonYear)
     this.bounds = worldBoundsFromSettings(this.settings)
     setActiveWorldBounds(this.bounds)
     resetPlantIds()
@@ -379,58 +380,82 @@ export class World {
 
     tickWaterCycle(this.atmosphere, this.soil, this.terrain, temperature)
 
-    // Water clamped out of soil during lateral diffusion vents at the map center (no single
-    // source cell); vent() routes any overflow to surface/soil so nothing leaks.
-    this.atmosphere.vent(this.bounds.width / 2, this.bounds.height / 2, this.soil.tickLateralDiffusion())
-
-    // Surface water levels out toward hydrostatic equilibrium (floods valleys, flows downhill).
-    this.terrain.tickSurfaceFlow()
-
-    this.primaryProductionThisTick += this.grass.tick(
-      this.rng,
-      this.soil,
-      this.atmosphere,
-      season.season,
-      sunlight,
-      temperature,
-      this.settings.maxGrassPlants,
-      this.plants,
-    )
-
-    for (const plant of this.plants) {
-      applyPlantAging(plant)
-      const energyBeforeStress = plant.energy
-      applyPlantOldAge(plant)
-      applyPlantTemperature(plant, temperature, season.season)
-      const stressEnergyLost = energyBeforeStress - plant.energy
-      if (stressEnergyLost > 0) {
-        releasePlantTranspiration(
-          stressEnergyLost * PLANT_WATER_PER_ENERGY,
-          plant,
-          this.soil,
-          this.atmosphere,
+    if (this.stats.tick % 4 === 0) {
+      // Soil/surface flow is heavy — batch a few passes every 4 minutes of sim time.
+      for (let pass = 0; pass < 2; pass++) {
+        this.atmosphere.vent(
+          this.bounds.width / 2,
+          this.bounds.height / 2,
+          this.soil.tickLateralDiffusion(),
         )
+        this.terrain.tickSurfaceFlow()
       }
-      tickWoodyPlantWaterUptake(plant, this.soil, this.atmosphere, season.season, temperature)
-      const transpired = applyPlantDrought(plant, this.soil, season.season, temperature)
-      releasePlantTranspiration(transpired, plant, this.soil, this.atmosphere)
-      const before = plant.energy
-      growPlant(plant, this.soil, sunlight, temperature, season.season, this.atmosphere)
-      this.primaryProductionThisTick += Math.max(0, plant.energy - before)
+    }
+
+    if (this.stats.tick % 4 === 0) {
+      this.primaryProductionThisTick += this.grass.tick(
+        this.rng,
+        this.soil,
+        this.atmosphere,
+        season.season,
+        sunlight,
+        temperature,
+        this.settings.maxGrassPlants,
+        this.plants,
+        this.terrain,
+        4,
+      )
+    }
+
+    const plantDt = this.stats.tick % 2 === 0 ? 2 : 0
+    if (plantDt > 0) {
+      for (const plant of this.plants) {
+        applyPlantAging(plant, plantDt)
+        const energyBeforeStress = plant.energy
+        applyPlantOldAge(plant)
+        applyPlantTemperature(plant, temperature, season.season)
+        const stressEnergyLost = energyBeforeStress - plant.energy
+        if (stressEnergyLost > 0) {
+          releasePlantTranspiration(
+            stressEnergyLost * PLANT_WATER_PER_ENERGY,
+            plant,
+            this.soil,
+            this.atmosphere,
+          )
+        }
+        tickWoodyPlantWaterUptake(plant, this.soil, this.atmosphere, season.season, temperature)
+        const transpired = applyPlantDrought(plant, this.soil, season.season, temperature)
+        releasePlantTranspiration(transpired, plant, this.soil, this.atmosphere)
+        const before = plant.energy
+        const submerged = this.terrain.isSubmerged(
+          plant.x,
+          plant.y,
+          plantDrownRadius(plant),
+        )
+        if (!submerged) {
+          growPlant(plant, this.soil, sunlight, temperature, season.season, this.atmosphere)
+          growPlant(plant, this.soil, sunlight, temperature, season.season, this.atmosphere)
+          this.primaryProductionThisTick += Math.max(0, plant.energy - before)
+        }
+      }
     }
 
     for (const corpse of this.corpses) {
       decayCorpse(corpse)
     }
 
-    this.spawnPlants()
+    if (plantDt > 0) this.spawnPlants()
     this.runCreatureBehavior()
     this.applySurfaceDrowning()
-    if (this.settings.brainControlEnabled) this.tickBrainLearning()
-    tickDiseaseSystem(this.creatures, this.pathogens, this.rng, this.stats.tick, this.settings)
+    if (this.settings.brainControlEnabled && this.stats.tick % 2 === 0) {
+      this.tickBrainLearning()
+    }
+    if (this.stats.tick % 2 === 0) {
+      tickDiseaseSystem(this.creatures, this.pathogens, this.rng, this.stats.tick, this.settings)
+    }
     this.cullDead()
     this.tickCreatureSpawning()
-    this.refreshStats()
+    this.refreshStats(this.stats.tick % 8 === 0)
   }
 
   snapshot(): WorldSnapshot {
@@ -617,6 +642,10 @@ export class World {
         this.atmosphere,
       )
       const child = createPlantNear(this.rng, parent, this.stats.season, seedCost * 0.95)
+      if (this.terrain.isSubmerged(child.x, child.y, plantDrownRadius(child))) {
+        parent.energy += seedCost
+        continue
+      }
       transferPlantSeedWater(parent, child, seedCost, this.atmosphere)
       fundInitialPlantStructuralWater(child, this.soil, this.atmosphere)
       this.plants.push(child)
@@ -654,6 +683,7 @@ export class World {
         // The evolved brain owns navigation; combat stays a reflex for aggressive creatures.
         const reaction = evaluateSpaceReaction(creature, spaceNeighbors)
         if (reaction.kind === 'attack') tryAttackCreature(creature, reaction.intruder)
+        this.fleeDrownIfNeeded(creature, traits)
         applyMovement(creature)
         continue
       }
@@ -676,6 +706,7 @@ export class World {
         creature.vx *= traits.sleepMobility
         creature.vy *= traits.sleepMobility
       }
+      this.fleeDrownIfNeeded(creature, traits)
 
       applyMovement(creature)
     }
@@ -1236,7 +1267,7 @@ export class World {
     }
     for (const plant of this.plants) {
       const before = plant.energy
-      applyPlantDrowning(plant, this.terrain, plantRadius(plant), plantDrownDamage(plant))
+      applyPlantDrowning(plant, this.terrain, plantDrownRadius(plant), plantDrownDamage(plant))
       const energyLost = before - plant.energy
       if (energyLost > 0) {
         releasePlantTranspiration(
@@ -1247,7 +1278,15 @@ export class World {
         )
       }
     }
-    this.grass.applyDrowning(this.terrain, this.soil, this.atmosphere, this.atmosphere.isRaining)
+    if (this.stats.tick % 4 === 0) {
+      this.grass.applyDrowning(
+        this.terrain,
+        this.soil,
+        this.atmosphere,
+        this.atmosphere.isRaining,
+        4,
+      )
+    }
   }
 
   private findGoal(creature: Creature): { x: number; y: number } {
@@ -1263,6 +1302,58 @@ export class World {
       case 'sleepy':
         return this.pickWanderGoal(creature)
     }
+  }
+
+  /**
+   * Leave drowning depth when not critically thirsty. Shore drinking should stand outside
+   * submersion; lingering mid-lake for hours is lethal on the minute clock.
+   */
+  private fleeDrownIfNeeded(
+    creature: Creature,
+    traits: ReturnType<typeof creatureTraits>,
+  ): void {
+    if (!this.terrain.isSubmerged(creature.x, creature.y, traits.radius)) return
+    // Still allow brief shoreline wading while actively topping up.
+    if (creature.mode === 'thirsty' && creature.hydration < thirstyExitLine(creature) * 0.92) {
+      return
+    }
+
+    const probe = Math.max(10, traits.radius + 14)
+    let bestDx = 0
+    let bestDy = 0
+    let bestScore = -Infinity
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2
+      const dx = Math.cos(ang)
+      const dy = Math.sin(ang)
+      const depth = this.terrain.wadingDepth(creature.x + dx * probe, creature.y + dy * probe)
+      const score = -depth
+      if (score > bestScore) {
+        bestScore = score
+        bestDx = dx
+        bestDy = dy
+      }
+    }
+    // Prefer climbing out of the basin when every nearby probe is still deep.
+    if (bestScore < -0.5) {
+      const heightHere = this.terrain.sampleHeight(creature.x, creature.y)
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * Math.PI * 2
+        const dx = Math.cos(ang)
+        const dy = Math.sin(ang)
+        const height = this.terrain.sampleHeight(creature.x + dx * probe, creature.y + dy * probe)
+        const score = height - heightHere
+        if (score > bestScore) {
+          bestScore = score
+          bestDx = dx
+          bestDy = dy
+        }
+      }
+    }
+
+    creature.vx = bestDx * traits.speed
+    creature.vy = bestDy * traits.speed
+    creature.heading = Math.atan2(bestDy, bestDx)
   }
 
   /** Evolved-brain movement: senses → neural net → egocentric steering → velocity. */
@@ -1293,6 +1384,16 @@ export class World {
       }
     }
 
+    // Hunger assist: same idea for food so founders don't starve while the seed brain adapts.
+    if (creature.mode === 'hungry' && readings.food && readings.hungerNeed > 0.2) {
+      const fDist = Math.hypot(readings.food.dx, readings.food.dy)
+      if (fDist > 1e-4) {
+        const blend = readings.hungerNeed > 0.55 ? 0.85 : 0.3 + readings.hungerNeed * 0.5
+        dirX = dirX * (1 - blend) + (readings.food.dx / fDist) * blend
+        dirY = dirY * (1 - blend) + (readings.food.dy / fDist) * blend
+      }
+    }
+
     const mag = Math.hypot(dirX, dirY)
 
     let speed = traits.speed * out.throttle
@@ -1300,6 +1401,9 @@ export class World {
     // Don't dawdle while critically thirsty — get to the drink.
     if (creature.mode === 'thirsty' && readings.thirstNeed > 0.5) {
       speed = Math.max(speed, traits.speed * 0.55)
+    }
+    if (creature.mode === 'hungry' && readings.hungerNeed > 0.5) {
+      speed = Math.max(speed, traits.speed * 0.5)
     }
 
     if (mag < 1e-4 || speed < 1e-4) {
@@ -1523,10 +1627,14 @@ export class World {
     this.corpses = this.corpses.filter(isCorpseEdible)
   }
 
-  private refreshStats(): void {
+  private refreshStats(fullWaterAccounting = true): void {
     this.stats.plantCount = this.plants.length
     this.stats.herbivoreCount = this.creatures.length
     this.stats.primaryProduction = this.primaryProductionThisTick
+
+    if (!fullWaterAccounting) {
+      return
+    }
 
     const kindCounts = countPlantsByKind(this.plants)
     this.stats.grassPlantCount = this.grass.countEdible()

@@ -747,7 +747,14 @@ export class TerrainWater {
         const { dx: ddx, dy: ddy } = toroidalDelta({ x, y }, center)
         const dist = Math.hypot(ddx, ddy)
         if (dist > seekRange) continue
-        const score = water / (1 + dist / Math.max(seekRange, 1))
+        // Prefer shore-adjacent / moderate water over deep lake centers.
+        const edge =
+          this.surfaceWater[cy * this.cols + this.wrap(cx - 1, this.cols)] <= 0.5 ||
+          this.surfaceWater[cy * this.cols + this.wrap(cx + 1, this.cols)] <= 0.5 ||
+          this.surfaceWater[this.wrap(cy - 1, this.rows) * this.cols + cx] <= 0.5 ||
+          this.surfaceWater[this.wrap(cy + 1, this.rows) * this.cols + cx] <= 0.5
+        const volumeScore = Math.min(water, 8)
+        const score = (volumeScore * (edge ? 3.2 : 1)) / (1 + dist / Math.max(seekRange, 1))
         if (score > bestScore) {
           bestScore = score
           best = { x: center.x, y: center.y, water }
@@ -774,7 +781,13 @@ export class TerrainWater {
       const center = this.cellWorldCenter(cx, cy)
       const { dx, dy } = toroidalDelta({ x, y }, center)
       const dist = Math.hypot(dx, dy)
-      const score = water / (1 + dist / mapScale)
+      const edge =
+        this.surfaceWater[cy * this.cols + this.wrap(cx - 1, this.cols)] <= 0.5 ||
+        this.surfaceWater[cy * this.cols + this.wrap(cx + 1, this.cols)] <= 0.5 ||
+        this.surfaceWater[this.wrap(cy - 1, this.rows) * this.cols + cx] <= 0.5 ||
+        this.surfaceWater[this.wrap(cy + 1, this.rows) * this.cols + cx] <= 0.5
+      const volumeScore = Math.min(water, 8)
+      const score = (volumeScore * (edge ? 3.2 : 1)) / (1 + dist / mapScale)
       if (score > bestScore) {
         bestScore = score
         best = { x: center.x, y: center.y, water }
@@ -791,9 +804,9 @@ export class TerrainWater {
   /** Shore point outside standing water, toward `from`. */
   /**
    * Stand-off point for drinking from surface water.
-   * `drinkReach` is the creature's surface-drink radius (`radius + forageReach * 0.35`).
-   * Prefer walking onto the water cell when it's shallow enough to stand; otherwise stand on the
-   * near shore well inside drink reach (leaving room for movement stop-distance).
+   * `drinkReach` is the creature's surface-drink radius (`radius + forageReach * 0.85`).
+   * Prefer walking onto the water cell when it's shallow enough to stand; otherwise walk outward
+   * from the wet cell until the body is no longer submerged (still within sip range when possible).
    */
   shoreApproachTarget(from: Vec2, waterCenter: Vec2, drinkReach: number): Vec2 {
     const reach = Math.max(drinkReach, 1)
@@ -805,16 +818,28 @@ export class TerrainWater {
 
     const { dx, dy } = toroidalDelta(from, waterCenter)
     const dist = Math.hypot(dx, dy)
-    // Stay close enough that stopDistance (~1–10) can't push the creature out of sip range.
-    const shoreDist = Math.max(1, Math.min(reach * 0.3, Math.min(this.cellW, this.cellH) * 0.2))
-    if (dist < 1e-3) {
-      return wrapPosition({ x: waterCenter.x + shoreDist, y: waterCenter.y })
+    const nx = dist < 1e-3 ? 1 : dx / dist
+    const ny = dist < 1e-3 ? 0 : dy / dist
+    const step = Math.max(2, Math.min(this.cellW, this.cellH) * 0.4)
+    const maxOut = Math.max(reach * 6, Math.min(this.cols * this.cellW, this.rows * this.cellH) * 0.3)
+    let distOut = step
+    while (distOut < maxOut) {
+      const candidate = wrapPosition({
+        x: waterCenter.x - nx * distOut,
+        y: waterCenter.y - ny * distOut,
+      })
+      if (!this.isSubmerged(candidate.x, candidate.y, bodyRadius)) {
+        const pad = Math.min(reach * 0.25, step)
+        return wrapPosition({
+          x: waterCenter.x - nx * (distOut + pad),
+          y: waterCenter.y - ny * (distOut + pad),
+        })
+      }
+      distOut += step
     }
-    const nx = dx / dist
-    const ny = dy / dist
     return wrapPosition({
-      x: waterCenter.x - nx * shoreDist,
-      y: waterCenter.y - ny * shoreDist,
+      x: waterCenter.x - nx * maxOut,
+      y: waterCenter.y - ny * maxOut,
     })
   }
 
